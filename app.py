@@ -127,6 +127,12 @@ st.markdown("""
         from { transform: translateY(20px); opacity: 0; }
         to { transform: translateY(0); opacity: 1; }
     }
+    /* 모바일에서 기획 시리즈 최적화 */
+    @media (max-width: 768px) {
+        .recommend-card {
+            margin-bottom: 15px;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -260,6 +266,7 @@ def generate_docent_story(city, road, reason, api_key, target_lang="한국어"):
 
 # 기획 시리즈 목록 (도슨트 큐레이션)
 CURATIONS = {
+    "🏠 도슨트 홈 (검색)": [],
     "🌟 도슨트 추천 길 이야기": [
         {"name": "하정로", "city": "동대문구", "desc": "🌿 청백리의 길"},
         {"name": "충무로", "city": "중구", "desc": "🗡️ 이순신의 기개"},
@@ -351,30 +358,7 @@ st.write("우리 동네 길 위에 숨겨진 흥미로운 이야기를 들려드
 
 data = load_data()
 if data:
-    # 추천 섹션 (사이드바에서 선택된 시리즈 렌더링)
-    st.markdown(f"### {selected_series}")
-    st.caption("카드를 클릭하면 바로 해설을 검색할 수 있습니다.")
-    
-    cols = st.columns(5)
-    for i, road in enumerate(CURATIONS[selected_series]):
-        with cols[i % 5]:
-            # 카드 스타일의 레이아웃
-            st.markdown(f"""
-            <div style="text-align: center; margin-top: 10px; margin-bottom: 5px;">
-                <span style="font-size: 0.8rem; color: #666; font-weight: 500; display: block; min-height: 2.2em; line-height: 1.1;">{road['desc']}</span>
-            </div>
-            """, unsafe_allow_html=True)
-            # 도로명 버튼
-            if st.button(road['name'], key=f"rec_{i}", use_container_width=True):
-                st.session_state.search_input = road['name']
-                st.session_state.search_city = road['city']
-                st.session_state.is_from_button = True
-                st.rerun()
-            st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
-
-    st.divider()
-
-    # 검색 섹션
+    # 1. 검색 섹션을 최상단으로 이동 (UX 개선)
     st.subheader("🔍 검색하기")
     search_query = st.text_input(
         "어떤 길의 이야기가 궁금하신가요?", 
@@ -390,21 +374,19 @@ if data:
         st.session_state.is_from_button = False
         
     if search_query:
+        # 검색 결과 렌더링 (기존 로직 유지)
         results = [row for row in data if str(row.get('도로명', '')) == search_query]
         
         if results:
             if len(results) > 1:
                 options_list = sorted([f"{row['시군구']}" for row in results])
-                
                 default_idx = 0
                 if st.session_state.search_city in options_list:
                     default_idx = options_list.index(st.session_state.search_city)
-                    
-                selection = st.selectbox("지역 선택 (이름이 같은 길이 여러 곳 있습니다)", options_list, index=default_idx)
                 
+                selection = st.selectbox("지역 선택 (이름이 같은 길이 여러 곳 있습니다)", options_list, index=default_idx)
                 if selection != st.session_state.search_city:
                     st.session_state.search_city = selection
-                    
                 final_row = next(item for item in results if item["시군구"] == selection)
             else:
                 final_row = results[0]
@@ -425,25 +407,39 @@ if data:
             with col2:
                 selected_lang = st.selectbox("🌐 해설 언어", list(VOICE_CONFIG.keys()), index=0)
             
-            # 여기서 캐시 여부를 미리 확인합니다
             cached = get_cached_docent(final_row['시군구'], final_row['도로명'], selected_lang)
-            
             if cached and os.path.exists(cached[1]):
-                # 캐시가 존재하면 즉시 렌더링 (버튼 누를 필요 없음)
                 docent_script, audio_file = cached
                 st.success("✅ 내 도감에서 불러왔습니다! (AI 호출 없음)")
                 st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
                 st.audio(audio_file)
             else:
-                # 캐시가 없을 때만 생성 버튼을 노출
                 if st.button("🎤 AI 도슨트 해설 듣기", type="primary", use_container_width=True):
                     with st.spinner("도로명주소 AI 도슨트의 특별한 해설을 준비하고 있습니다. 잠시만 기다려 주세요..."):
                         docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang)
                         audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
-                        
-                        # 생성된 결과 캐싱 (선택된 언어 추가)
                         save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                         st.info("✨ 새로운 해설이 생성 및 도감에 저장되었습니다.")
-                        
                         st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
                         st.audio(audio_file)
+    
+    # 2. 기획 시리즈 섹션 (메뉴 선택 시에만 표시)
+    if selected_series != "🏠 도슨트 홈 (검색)":
+        st.divider()
+        st.markdown(f"### {selected_series}")
+        st.caption("카드를 클릭하면 바로 해설을 검색할 수 있습니다.")
+        
+        cols = st.columns(5)
+        for i, road in enumerate(CURATIONS[selected_series]):
+            with cols[i % 5]:
+                st.markdown(f"""
+                <div style="text-align: center; margin-top: 10px; margin-bottom: 5px;">
+                    <span style="font-size: 0.8rem; color: #666; font-weight: 500; display: block; min-height: 2.2em; line-height: 1.1;">{road['desc']}</span>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.button(road['name'], key=f"rec_{i}", use_container_width=True):
+                    st.session_state.search_input = road['name']
+                    st.session_state.search_city = road['city']
+                    st.session_state.is_from_button = True
+                    st.rerun()
+                st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
