@@ -428,6 +428,13 @@ if data:
             
             st.markdown(f'<div class="reason-box"><h3>📍 {final_row["시군구"]} {final_row["도로명"]}</h3><p>"{final_row["부여사유"]}"</p></div>', unsafe_allow_html=True)
             
+            # 케데헌 시리즈에서 남산공원길 선택 시 특별 일러스트 표시
+            if final_row['도로명'] == "남산공원길" and "케데헌" in selected_series:
+                if os.path.exists(os.path.join(BASE_DIR, "n_seoul_tower_action.png")):
+                    st.image("n_seoul_tower_action.png", caption="⚡ 영화 '케데헌'의 분위기를 상징하는 테마 일러스트 (AI 제작)", use_container_width=True)
+                else:
+                    st.info("🎨 남산타워 액션 테마 일러스트가 준비되어 있습니다.")
+            
             # 🗺️ 구글 지도 임베드 (반응형 적용)
             st.markdown("<br>", unsafe_allow_html=True)
             map_query = f"{final_row['시군구']} {final_row['도로명']}"
