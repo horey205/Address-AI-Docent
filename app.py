@@ -448,11 +448,24 @@ if data:
                 selected_lang = st.selectbox("🌐 해설 언어", list(VOICE_CONFIG.keys()), index=0)
             
             cached = get_cached_docent(final_row['시군구'], final_row['도로명'], selected_lang)
-            if cached and os.path.exists(cached[1]):
+            is_fallback = cached and "(API 키가 설정되지 않아" in cached[0]
+            
+            # 캐시가 있고, 'API 키 없음' 경고가 포함되지 않았을 때만 캐시 사용
+            if cached and not is_fallback and os.path.exists(cached[1]):
                 docent_script, audio_file = cached
                 st.success("✅ 내 도감에서 불러왔습니다! (AI 호출 없음)")
                 st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
                 st.audio(audio_file)
+                
+                # 수동 재생성 버튼 추가
+                if st.button("🔄 AI 해설 다시 만들기", key="re_gen_btn"):
+                    with st.spinner("AI 도슨트가 새로운 시각으로 해설을 준비하고 있습니다..."):
+                        docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang)
+                        audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
+                        save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
+                        st.info("✨ 새로운 해설로 업데이트되었습니다.")
+                        st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
+                        st.audio(audio_file)
             else:
                 if st.button("🎤 AI 도슨트 해설 듣기", type="primary", use_container_width=True):
                     with st.spinner("도로명주소 AI 도슨트의 특별한 해설을 준비하고 있습니다. 잠시만 기다려 주세요..."):
