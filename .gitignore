@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+.env
+
+# Local Cache & Data
+docent_cache.db
+mp3/
+*.mp3
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/config.toml
+
+# OS
+.DS_Store
+Thumbs.db
