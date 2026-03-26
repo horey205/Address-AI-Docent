@@ -412,11 +412,11 @@ if data:
             
             st.markdown(f'<div class="reason-box"><h3>📍 {final_row["시군구"]} {final_row["도로명"]}</h3><p>"{final_row["부여사유"]}"</p></div>', unsafe_allow_html=True)
             
-            # 🗺️ 구글 지도 임베드 (가장 쉬운 지도 시각화)
+            # 🗺️ 구글 지도 임베드 (반응형 적용)
             st.markdown("<br>", unsafe_allow_html=True)
             map_query = f"{final_row['시군구']} {final_row['도로명']}"
             map_url = f"https://www.google.com/maps?q={map_query}&output=embed"
-            components.iframe(map_url, width=700, height=350)
+            st.markdown(f'<iframe src="{map_url}" width="100%" height="350" style="border:0; border-radius:15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" allowfullscreen="" loading="lazy"></iframe>', unsafe_allow_html=True)
             
             st.divider()
 
