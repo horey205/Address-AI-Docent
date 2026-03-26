@@ -456,12 +456,6 @@ if data:
                         st.info("✨ 새로운 해설이 생성 및 도감에 저장되었습니다.")
                         st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
                         st.audio(audio_file)
-            
-            # 결과물 최하단에 테마 일러스트 배치 (UX 최적화)
-            if final_row['도로명'] == "남산공원길" and "케데헌" in selected_series:
-                if os.path.exists(os.path.join(BASE_DIR, "n_seoul_tower_action.png")):
-                    st.divider()
-                    st.image("n_seoul_tower_action.png", caption="⚡ 영화 '케데헌'의 분위기를 상징하는 테마 일러스트 (AI 제작)", use_container_width=True)
     
     # 2. 기획 시리즈 섹션 (메뉴 선택 시에만 표시)
     if selected_series != "🏠 도슨트 홈 (검색)":
@@ -483,3 +477,8 @@ if data:
                     st.session_state.is_from_button = True
                     st.rerun()
                 st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+        
+        # 기획 시리즈 카드 뭉치 바로 아래에 테마 일러스트 배치
+        if "케데헌" in selected_series and st.session_state.search_input == "남산공원길":
+            if os.path.exists(os.path.join(BASE_DIR, "n_seoul_tower_action.png")):
+                st.image("n_seoul_tower_action.png", caption="⚡ 영화 '케데헌'의 분위기를 상징하는 테마 일러스트 (AI 제작)", use_container_width=True)
