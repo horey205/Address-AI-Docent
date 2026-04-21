@@ -519,11 +519,11 @@ if data:
                     st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
                     
                     if os.path.exists(server_audio_path):
-                        # Base64 변환을 거쳐 브라우저로 직접 송출
+                        # Base64 변환 후 HTML로 출력
                         audio_html = get_audio_player(server_audio_path)
                         st.markdown(audio_html, unsafe_allow_html=True)
                     else:
-                        st.info("🔈 음성 파일은 서버에 업로드 중이거나 로컬 전용입니다. (아래 버튼으로 다시 생성 가능)")
+                        st.info("🔈 음성 파일은 서버에 업로드 중이거나 로컬 전용입니다. (검색된 경로: " + server_audio_path + ")")
                     
                     # 수동 재생성 버튼 추가
                     if st.button("🔄 AI 해설 다시 만들기", key="re_gen_btn"):
