@@ -475,6 +475,18 @@ if data:
 
             # [동기화 핵심] 결정된 언어로 캐시 조회
             cached = get_cached_docent(final_row['시군구'], final_row['도로명'], current_lang)
+            
+            # --- [스마트 싱크 추가] ---
+            # 만약 선택한 언어의 캐시가 없는데, 다른 언어의 캐시는 있을 수 있으므로 체크
+            if not cached:
+                # 다른 모든 언어로 한 번 더 뒤져봄 (어떤 데이터라도 있는지 확인)
+                for alt_lang in lang_list:
+                    alt_cached = get_cached_docent(final_row['시군구'], final_row['도로명'], alt_lang)
+                    if alt_cached:
+                        cached = alt_cached
+                        selected_lang = alt_lang # 겉모양(UI)도 실제 데이터 언어로 강제 변경
+                        break
+            # --- [스마트 싱크 끝] ---
             is_fallback = cached and "(API 키가 설정되지 않아" in cached[0]
             
             # 캐시가 있다면 오디오 파일 존재 여부와 상관없이 '해설서'는 먼저 보여줍니다.
