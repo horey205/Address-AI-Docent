@@ -203,19 +203,17 @@ def init_db():
 
 def get_cached_docent(city, road, lang="한국어"):
     try:
-        # DB 연결 재시도 로직 및 경로 명확화
         conn = sqlite3.connect(DB_FILE)
-        # 더 유연한 검색 (앞뒤 공백 제거 및 부분 일치 강화)
-        clean_city = city.strip() if city else ""
-        clean_road = road.strip() if road else ""
+        # 검색어 클리닝: 공백 제거 및 소문자화(필요 시)
+        clean_city = city.replace(" ", "") if city else ""
+        clean_road = road.replace(" ", "") if road else ""
         
-        query = "SELECT script, audio_path FROM story_cache WHERE (city LIKE ? AND road LIKE ?) AND lang=? LIMIT 1"
-        row = conn.execute(query, (f'%{clean_city}%', f'%{clean_road}%', lang)).fetchone()
+        # 도로명은 무조건 포함되어야 하므로 %road% 사용
+        query = "SELECT script, audio_path FROM story_cache WHERE (city LIKE ? OR road LIKE ?) AND road LIKE ? AND lang=? LIMIT 1"
+        row = conn.execute(query, (f'%{clean_city}%', f'%{clean_road}%', f'%{clean_road}%', lang)).fetchone()
         conn.close()
         return row
     except Exception as e:
-        # 서버 로그에서 원인 확인을 위한 에러 처리
-        print(f"DB Query Error: {e}")
         return None
 
 init_db()
