@@ -8,11 +8,6 @@ venv/
 ENV/
 .env
 
-# Local Cache & Data
-docent_cache.db
-mp3/
-*.mp3
-
 # Streamlit
 .streamlit/secrets.toml
 .streamlit/config.toml
