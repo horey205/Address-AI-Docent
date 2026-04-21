@@ -492,7 +492,7 @@ if data:
                 
                 # 서버 환경에 맞게 오디오 경로 재탐색 (파일명이 조금 달라도 도로명을 포함하면 찾음)
                 audio_filename = os.path.basename(audio_file_path)
-                clean_road = road.replace(" ", "")
+                clean_road = final_row['도로명'].replace(" ", "")
                 
                 # 1. 원래 경로로 먼저 시도
                 server_audio_path = os.path.join(BASE_DIR, "mp3", audio_filename)
