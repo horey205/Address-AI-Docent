@@ -141,7 +141,14 @@ st.markdown("""
 
 # 데이터 로드
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FILE = os.path.join(BASE_DIR, "docent_cache.db")
 JSON_FILE = os.path.join(BASE_DIR, 'road_names.json')
+
+# 서버용 디버그 출력
+if not os.path.exists(DB_FILE):
+    st.error(f"🚨 DB 파일이 서버에 없습니다: {DB_FILE}")
+else:
+    st.sidebar.success(f"📂 DB 발견: {os.path.getsize(DB_FILE)} bytes")
 
 @st.cache_data
 def load_data():
@@ -398,6 +405,7 @@ with st.sidebar:
 
 # 앱 구성 (나머지 동일)
 st.title("🎙️ 주소 AI 도슨트")
+st.code(f"DB Path: {DB_FILE}", language="bash") # 서버에서 경로 확인용
 st.write("우리 동네 길 위에 숨겨진 흥미로운 이야기를 들려드립니다.")
 
 data = load_data()
