@@ -457,7 +457,9 @@ if data:
             with col2:
                 selected_lang = st.selectbox("🌐 해설 언어", list(VOICE_CONFIG.keys()), index=0)
             
-            cached = get_cached_docent(final_row['시군구'], final_row['도로명'], selected_lang)
+            # 언어 명칭 변환 (예: 한국어 -> Korean)
+            target_lang_name = VOICE_CONFIG.get(selected_lang, VOICE_CONFIG["한국어"])["lang_name"]
+            cached = get_cached_docent(final_row['시군구'], final_row['도로명'], target_lang_name)
             is_fallback = cached and "(API 키가 설정되지 않아" in cached[0]
             
             # 캐시가 있고, 'API 키 없음' 경고가 포함되지 않았을 때만 정상 노출
