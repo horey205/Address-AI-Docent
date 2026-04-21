@@ -475,10 +475,9 @@ if data:
             # 언어 선택 및 해설 듣기
             col1, col2 = st.columns([2, 1])
             with col2:
-                selected_lang = st.selectbox("🌐 해설 언어", list(VOICE_CONFIG.keys()), index=0)
+                selected_lang = st.selectbox("🌐 해설 언어", list(VOICE_CONFIG.keys()), index=0, key="lang_selector")
             
-            # 사용자 DB 확인 결과: 언어가 '한국어', 'English' 등으로 저장되어 있음 
-            # 따라서 별도 변환 없이 selected_lang 그대로 조회함
+            # [동기화 핵심] 선택된 언어를 즉시 반영하여 다시 캐시 조회
             cached = get_cached_docent(final_row['시군구'], final_row['도로명'], selected_lang)
             is_fallback = cached and "(API 키가 설정되지 않아" in cached[0]
             
