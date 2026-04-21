@@ -461,6 +461,8 @@ if data:
             if final_lookup_lang and final_lookup_lang in lang_list:
                 default_lang_idx = lang_list.index(final_lookup_lang)
 
+            # 언어 선택 및 해설 듣기
+            col1, col2 = st.columns([2, 1])
             with col2:
                 selected_lang = st.selectbox("🌐 해설 언어", lang_list, index=default_lang_idx, key="lang_selector")
             
