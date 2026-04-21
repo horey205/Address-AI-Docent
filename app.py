@@ -200,12 +200,12 @@ def get_cached_docent(city, road, lang="한국어"):
         clean_city = city.replace(" ", "") if city else ""
         clean_road = road.replace(" ", "") if road else ""
         
-        # [정밀 타격] 도시명과 도로명, 그리고 언어까지 모두 일치하는 최우선 순위 검색
+        # [정밀 타격] 도시명과 도로명, 그리고 '언어'가 100% 일치해야만 가져옵니다.
         query = """
             SELECT script, audio_path FROM story_cache 
             WHERE REPLACE(city, ' ', '') LIKE ? 
             AND REPLACE(road, ' ', '') = ? 
-            AND lang = ? 
+            AND lang = ?
             LIMIT 1
         """
         row = conn.execute(query, (f'%{clean_city}%', clean_road, lang)).fetchone()
