@@ -389,16 +389,18 @@ with st.sidebar:
     try:
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
-        c.execute('SELECT DISTINCT city, road FROM story_cache ORDER BY id DESC')
+        c.execute('SELECT city, road, lang FROM story_cache ORDER BY id DESC')
         history = c.fetchall()
         conn.close()
         
         if history:
             st.caption(f"총 {len(history)}개의 사례가 보존되어 있습니다.")
-            for city, road in history:
-                if st.button(f"🏷️ {city} {road}", key=f"hist_{city}_{road}"):
+            for city, road, lang in history:
+                if st.button(f"🏷️ {city} {road} ({lang})", key=f"hist_{city}_{road}_{lang}"):
                     st.session_state.search_input = road
                     st.session_state.search_city = city
+                    # 클릭한 항목의 언어로 자동 설정
+                    st.session_state.target_lang_from_hist = lang
                     st.session_state.is_from_button = True
                     st.rerun()
         else:
@@ -474,8 +476,16 @@ if data:
 
             # 언어 선택 및 해설 듣기
             col1, col2 = st.columns([2, 1])
+            # 언어 선택 도구 (도감 클릭 시 연동)
+            lang_list = list(VOICE_CONFIG.keys())
+            default_lang_idx = 0
+            if 'target_lang_from_hist' in st.session_state and st.session_state.target_lang_from_hist in lang_list:
+                default_lang_idx = lang_list.index(st.session_state.target_lang_from_hist)
+                # 한 번 반영 후 초기화 (다음 수동 조작을 위해)
+                del st.session_state.target_lang_from_hist
+
             with col2:
-                selected_lang = st.selectbox("🌐 해설 언어", list(VOICE_CONFIG.keys()), index=0, key="lang_selector")
+                selected_lang = st.selectbox("🌐 해설 언어", lang_list, index=default_lang_idx, key="lang_selector")
             
             # [동기화 핵심] 선택된 언어를 즉시 반영하여 다시 캐시 조회
             cached = get_cached_docent(final_row['시군구'], final_row['도로명'], selected_lang)
