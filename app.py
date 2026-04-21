@@ -490,9 +490,10 @@ if data:
             if cached:
                 docent_script, audio_file_path = cached
                 
-                # 서버 환경에 맞게 오디오 경로 재설정 (파일명만 추출하여 mp3 폴더에서 찾음)
+                # 서버 환경에 맞게 오디오 경로 재설정 (파일명만 추출하여 저장된 mp3 폴더에서 찾음)
                 audio_filename = os.path.basename(audio_file_path)
-                server_audio_path = os.path.join(MP3_DIR, audio_filename)
+                # 상단에 이미 정의된 BASE_DIR 기반으로 mp3 폴더 경로 설정
+                server_audio_path = os.path.join(BASE_DIR, "mp3", audio_filename)
                 if is_fallback:
                     st.warning("⚠️ 이전에 API 키 없이 생성된 기본 해설입니다. 아래 버튼을 눌러 정식 AI 해설로 업데이트하세요.")
                     st.markdown(f'<div class="docent-script-box" style="opacity: 0.7;">{docent_script}</div>', unsafe_allow_html=True)
