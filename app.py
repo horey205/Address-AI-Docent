@@ -490,10 +490,21 @@ if data:
             if cached:
                 docent_script, audio_file_path = cached
                 
-                # 서버 환경에 맞게 오디오 경로 재설정 (파일명만 추출하여 저장된 mp3 폴더에서 찾음)
+                # 서버 환경에 맞게 오디오 경로 재탐색 (파일명이 조금 달라도 도로명을 포함하면 찾음)
                 audio_filename = os.path.basename(audio_file_path)
-                # 상단에 이미 정의된 BASE_DIR 기반으로 mp3 폴더 경로 설정
+                clean_road = road.replace(" ", "")
+                
+                # 1. 원래 경로로 먼저 시도
                 server_audio_path = os.path.join(BASE_DIR, "mp3", audio_filename)
+                
+                # 2. 실패 시, mp3 폴더 내에서 '도로명'이 들어간 파일 강제 탐색
+                if not os.path.exists(server_audio_path):
+                    mp3_dir = os.path.join(BASE_DIR, "mp3")
+                    if os.path.exists(mp3_dir):
+                        for f in os.listdir(mp3_dir):
+                            if clean_road in f and f.endswith(".mp3"):
+                                server_audio_path = os.path.join(mp3_dir, f)
+                                break
                 if is_fallback:
                     st.warning("⚠️ 이전에 API 키 없이 생성된 기본 해설입니다. 아래 버튼을 눌러 정식 AI 해설로 업데이트하세요.")
                     st.markdown(f'<div class="docent-script-box" style="opacity: 0.7;">{docent_script}</div>', unsafe_allow_html=True)
