@@ -9,6 +9,9 @@ import base64
 from google import genai
 from google.genai import types
 import uuid
+import requests
+import time
+from ollama import Client
 
 # 페이지 설정
 st.set_page_config(page_title="주소 AI 도슨트", page_icon="🎙️", layout="centered")
@@ -181,35 +184,26 @@ def get_audio_player(file_path):
         b64 = base64.b64encode(data).decode()
         return f'<audio src="data:audio/mp3;base64,{b64}">'
 
-# SQLite DB 초기화
+# SQLite DB 설정
 DB_FILE = os.path.join(BASE_DIR, "docent_cache.db")
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS story_cache (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            city TEXT,
-            road TEXT,
-            lang TEXT,
-            script TEXT,
-            audio_path TEXT,
-            UNIQUE(city, road, lang)
-        )
-    ''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS story_cache 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, city TEXT, road TEXT, lang TEXT, script TEXT, audio_path TEXT, UNIQUE(city, road, lang))''')
     conn.commit()
     conn.close()
 
-init_db()
+def get_cached_docent(city, road, lang="한국어"):
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row = conn.execute('SELECT script, audio_path FROM story_cache WHERE (city LIKE ? OR road LIKE ?) AND lang=? LIMIT 1', 
+                           (f'%{city}%', f'%{road}%', lang)).fetchone()
+        conn.close()
+        return row
+    except: return None
 
-def get_cached_docent(city, road, lang):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('SELECT script, audio_path FROM story_cache WHERE city=? AND road=? AND lang=?', (city, road, lang))
-    row = c.fetchone()
-    conn.close()
-    return row
+init_db()
 
 def save_docent_cache(city, road, lang, script, audio_path):
     conn = sqlite3.connect(DB_FILE)
