@@ -196,13 +196,20 @@ def init_db():
 
 def get_cached_docent(city, road, lang="한국어"):
     try:
+        # DB 연결 재시도 로직 및 경로 명확화
         conn = sqlite3.connect(DB_FILE)
-        # 도시와 도로명을 모두 고려하여 정확한 캐시 탐색
-        row = conn.execute('SELECT script, audio_path FROM story_cache WHERE (city LIKE ? AND road LIKE ?) AND lang=? LIMIT 1', 
-                           (f'%{city}%', f'%{road}%', lang)).fetchone()
+        # 더 유연한 검색 (앞뒤 공백 제거 및 부분 일치 강화)
+        clean_city = city.strip() if city else ""
+        clean_road = road.strip() if road else ""
+        
+        query = "SELECT script, audio_path FROM story_cache WHERE (city LIKE ? AND road LIKE ?) AND lang=? LIMIT 1"
+        row = conn.execute(query, (f'%{clean_city}%', f'%{clean_road}%', lang)).fetchone()
         conn.close()
         return row
-    except: return None
+    except Exception as e:
+        # 서버 로그에서 원인 확인을 위한 에러 처리
+        print(f"DB Query Error: {e}")
+        return None
 
 init_db()
 
@@ -376,6 +383,7 @@ with st.sidebar:
         conn.close()
         
         if history:
+            st.caption(f"총 {len(history)}개의 사례가 보존되어 있습니다.")
             for city, road in history:
                 if st.button(f"🏷️ {city} {road}", key=f"hist_{city}_{road}"):
                     st.session_state.search_input = road
@@ -383,9 +391,10 @@ with st.sidebar:
                     st.session_state.is_from_button = True
                     st.rerun()
         else:
-            st.caption("아직 기록이 없습니다. 길을 검색하고 도슨트를 들어보세요!")
+            st.warning("⚠️ 서버 DB에서 사례를 찾을 수 없습니다. (업로드 확인 필요)")
+            st.caption("로컬의 docent_cache.db 파일이 서버에 동기화되지 않았을 수 있습니다.")
     except Exception as e:
-        st.caption("도감 정보를 불러올 수 없습니다.")
+        st.caption(f"도감 정보를 불러올 수 없습니다. ({e})")
 
 # 앱 구성 (나머지 동일)
 st.title("🎙️ 주소 AI 도슨트")
