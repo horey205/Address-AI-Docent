@@ -449,21 +449,30 @@ if data:
             
             st.divider()
 
-            # 언어 선택 및 해설 듣기
-            col1, col2 = st.columns([2, 1])
             # 언어 선택 도구 (도감 클릭 시 연동)
             lang_list = list(VOICE_CONFIG.keys())
+            
+            # 도감에서 클릭한 언어가 있다면 그것을 최종 검색 언어로 강제 설정
+            final_lookup_lang = None
+            if 'target_lang_from_hist' in st.session_state:
+                final_lookup_lang = st.session_state.target_lang_from_hist
+            
             default_lang_idx = 0
-            if 'target_lang_from_hist' in st.session_state and st.session_state.target_lang_from_hist in lang_list:
-                default_lang_idx = lang_list.index(st.session_state.target_lang_from_hist)
-                # 한 번 반영 후 초기화 (다음 수동 조작을 위해)
-                del st.session_state.target_lang_from_hist
+            if final_lookup_lang and final_lookup_lang in lang_list:
+                default_lang_idx = lang_list.index(final_lookup_lang)
 
             with col2:
                 selected_lang = st.selectbox("🌐 해설 언어", lang_list, index=default_lang_idx, key="lang_selector")
             
-            # [동기화 핵심] 선택된 언어를 즉시 반영하여 다시 캐시 조회
-            cached = get_cached_docent(final_row['시군구'], final_row['도로명'], selected_lang)
+            # 검색에 사용할 최종 언어 결정 (도감 클릭 우선, 아니면 셀렉트박스 값)
+            current_lang = final_lookup_lang if final_lookup_lang else selected_lang
+            
+            # 한 번 반영 후 초기화 (다음 수동 조작을 위해)
+            if 'target_lang_from_hist' in st.session_state:
+                del st.session_state.target_lang_from_hist
+
+            # [동기화 핵심] 결정된 언어로 캐시 조회
+            cached = get_cached_docent(final_row['시군구'], final_row['도로명'], current_lang)
             is_fallback = cached and "(API 키가 설정되지 않아" in cached[0]
             
             # 캐시가 있다면 오디오 파일 존재 여부와 상관없이 '해설서'는 먼저 보여줍니다.
