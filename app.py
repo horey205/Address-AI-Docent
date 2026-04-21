@@ -197,7 +197,8 @@ def init_db():
 def get_cached_docent(city, road, lang="한국어"):
     try:
         conn = sqlite3.connect(DB_FILE)
-        row = conn.execute('SELECT script, audio_path FROM story_cache WHERE (city LIKE ? OR road LIKE ?) AND lang=? LIMIT 1', 
+        # 도시와 도로명을 모두 고려하여 정확한 캐시 탐색
+        row = conn.execute('SELECT script, audio_path FROM story_cache WHERE (city LIKE ? AND road LIKE ?) AND lang=? LIMIT 1', 
                            (f'%{city}%', f'%{road}%', lang)).fetchone()
         conn.close()
         return row
@@ -457,9 +458,12 @@ if data:
                             save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                             st.rerun()
                 else:
-                    st.success("✅ 내 도감에서 불러왔습니다! (AI 호출 없음)")
+                    st.success("✅ 내 도감에서 불러왔습니다! (AI 호출 없이 보존된 사례)")
                     st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
-                    st.audio(audio_file)
+                    if os.path.exists(audio_file):
+                        st.audio(audio_file)
+                    else:
+                        st.info("음성 파일이 서버에 없습니다. (아래 버튼으로 재생성 가능)")
                     
                     # 수동 재생성 버튼 추가
                     if st.button("🔄 AI 해설 다시 만들기", key="re_gen_btn"):
