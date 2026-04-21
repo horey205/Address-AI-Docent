@@ -11,7 +11,12 @@ from google.genai import types
 import uuid
 import requests
 import time
-from ollama import Client
+# Ollama는 로컬 전용이므로 서버 에러 방지를 위해 예외 처리
+try:
+    from ollama import Client as OllamaClient
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
 
 # 페이지 설정
 st.set_page_config(page_title="주소 AI 도슨트", page_icon="🎙️", layout="centered")
