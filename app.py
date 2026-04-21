@@ -209,13 +209,12 @@ def init_db():
 def get_cached_docent(city, road, lang="한국어"):
     try:
         conn = sqlite3.connect(DB_FILE)
-        # 검색어 클리닝: 공백 제거 및 소문자화(필요 시)
-        clean_city = city.replace(" ", "") if city else ""
-        clean_road = road.replace(" ", "") if road else ""
+        # 검색어에서 모든 공백을 제거하여 순수 텍스트만 추출
+        search_target = (city + road).replace(" ", "")
         
-        # 도로명은 무조건 포함되어야 하므로 %road% 사용
-        query = "SELECT script, audio_path FROM story_cache WHERE (city LIKE ? OR road LIKE ?) AND road LIKE ? AND lang=? LIMIT 1"
-        row = conn.execute(query, (f'%{clean_city}%', f'%{clean_road}%', f'%{clean_road}%', lang)).fetchone()
+        # DB에서도 시군구와 도로명을 합친 뒤 공백을 무시하고 검색
+        query = "SELECT script, audio_path FROM story_cache WHERE REPLACE(city || road, ' ', '') LIKE ? AND lang=? LIMIT 1"
+        row = conn.execute(query, (f'%{search_target}%', lang)).fetchone()
         conn.close()
         return row
     except Exception as e:
