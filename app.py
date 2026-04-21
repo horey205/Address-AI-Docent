@@ -396,7 +396,6 @@ with st.sidebar:
                     st.session_state.target_lang_from_hist = lang
                     st.session_state.is_from_button = True
                     st.rerun()
-        else:
     except Exception as e:
         st.caption(f"도감 정보를 불러올 수 없습니다. ({e})")
 
