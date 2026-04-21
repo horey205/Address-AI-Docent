@@ -406,6 +406,20 @@ with st.sidebar:
     except Exception as e:
         st.caption(f"도감 정보를 불러올 수 없습니다. ({e})")
 
+    # --- [임시 디버깅 도구] ---
+    with st.expander("🔍 [개발자용] DB 원천 데이터 확인"):
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            df_check = conn.execute('SELECT id, city, road, lang FROM story_cache').fetchall()
+            conn.close()
+            if df_check:
+                st.table(df_check)
+            else:
+                st.write("DB에 데이터가 하나도 없습니다.")
+        except Exception as e:
+            st.write(f"DB 접근 에러: {e}")
+    # --- [임시 디버깅 도구 끝] ---
+
 # 앱 구성 (나머지 동일)
 st.title("🎙️ 주소 AI 도슨트")
 st.code(f"DB Path: {DB_FILE}", language="bash") # 서버에서 경로 확인용
