@@ -203,18 +203,20 @@ def init_db():
 def get_cached_docent(city, road, lang="한국어"):
     try:
         conn = sqlite3.connect(DB_FILE)
-        # 도로명에서 공백 제거
-        clean_road = road.replace(" ", "")
+        # 검색어 클리닝
+        clean_city = city.replace(" ", "") if city else ""
+        clean_road = road.replace(" ", "") if road else ""
         
-        # 도로명만으로 먼저 후보군을 찾고, 그 중 도시명이 포함되는지 확인하는 가장 유연한 방식
-        query = "SELECT script, audio_path FROM story_cache WHERE REPLACE(road, ' ', '') = ? AND lang=? LIMIT 1"
-        row = conn.execute(query, (clean_road, lang)).fetchone()
+        # [정밀 타격] 도시명과 도로명, 그리고 언어까지 모두 일치하는 최우선 순위 검색
+        query = """
+            SELECT script, audio_path FROM story_cache 
+            WHERE REPLACE(city, ' ', '') LIKE ? 
+            AND REPLACE(road, ' ', '') = ? 
+            AND lang = ? 
+            LIMIT 1
+        """
+        row = conn.execute(query, (f'%{clean_city}%', clean_road, lang)).fetchone()
         
-        # 만약 도로명이 중복될 경우를 대비해 도시명 매칭 시도 (옵션)
-        if not row:
-            query = "SELECT script, audio_path FROM story_cache WHERE REPLACE(city || road, ' ', '') LIKE ? AND lang=? LIMIT 1"
-            row = conn.execute(query, (f'%{clean_road}%', lang)).fetchone()
-            
         conn.close()
         return row
     except Exception as e:
