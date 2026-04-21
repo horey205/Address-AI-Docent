@@ -146,14 +146,7 @@ st.markdown("""
 
 # 데이터 로드
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_FILE = os.path.join(BASE_DIR, "docent_cache.db")
 JSON_FILE = os.path.join(BASE_DIR, 'road_names.json')
-
-# 서버용 디버그 출력
-if not os.path.exists(DB_FILE):
-    st.error(f"🚨 DB 파일이 서버에 없습니다: {DB_FILE}")
-else:
-    st.sidebar.success(f"📂 DB 발견: {os.path.getsize(DB_FILE)} bytes")
 
 @st.cache_data
 def load_data():
@@ -404,28 +397,11 @@ with st.sidebar:
                     st.session_state.is_from_button = True
                     st.rerun()
         else:
-            st.warning("⚠️ 서버 DB에서 사례를 찾을 수 없습니다. (업로드 확인 필요)")
-            st.caption("로컬의 docent_cache.db 파일이 서버에 동기화되지 않았을 수 있습니다.")
     except Exception as e:
         st.caption(f"도감 정보를 불러올 수 없습니다. ({e})")
 
-    # --- [임시 디버깅 도구] ---
-    with st.expander("🔍 [개발자용] DB 원천 데이터 확인"):
-        try:
-            conn = sqlite3.connect(DB_FILE)
-            df_check = conn.execute('SELECT id, city, road, lang FROM story_cache').fetchall()
-            conn.close()
-            if df_check:
-                st.table(df_check)
-            else:
-                st.write("DB에 데이터가 하나도 없습니다.")
-        except Exception as e:
-            st.write(f"DB 접근 에러: {e}")
-    # --- [임시 디버깅 도구 끝] ---
-
 # 앱 구성 (나머지 동일)
 st.title("🎙️ 주소 AI 도슨트")
-st.code(f"DB Path: {DB_FILE}", language="bash") # 서버에서 경로 확인용
 st.write("우리 동네 길 위에 숨겨진 흥미로운 이야기를 들려드립니다.")
 
 data = load_data()
