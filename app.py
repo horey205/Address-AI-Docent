@@ -170,31 +170,25 @@ VOICE_CONFIG = {
 }
 
 async def generate_speech(text, city, road, lang="한국어"):
-    # 파일명에 공백 제거 및 조합
     safe_city = city.replace(" ", "")
     safe_road = road.replace(" ", "")
     lang_name = VOICE_CONFIG.get(lang, VOICE_CONFIG["한국어"])["lang_name"]
-    
-    # 예: 강남구_가로수길_Korean.mp3
     filename = f"{safe_city}_{safe_road}_{lang_name}.mp3"
-    
-    # mp3 전용 폴더 생성 및 결로 지정
     mp3_dir = os.path.join(BASE_DIR, "mp3")
     if not os.path.exists(mp3_dir):
         os.makedirs(mp3_dir)
-        
     output_file = os.path.join(mp3_dir, filename)
-    
     voice = VOICE_CONFIG.get(lang, VOICE_CONFIG["한국어"])["voice"]
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_file)
     return output_file
 
 def get_audio_player(file_path):
+    import base64
     with open(file_path, "rb") as f:
         data = f.read()
         b64 = base64.b64encode(data).decode()
-        return f'<audio src="data:audio/mp3;base64,{b64}">'
+        return f'<audio controls src="data:audio/mp3;base64,{b64}" style="width:100%;">'
 
 # SQLite DB 설정
 DB_FILE = os.path.join(BASE_DIR, "docent_cache.db")
