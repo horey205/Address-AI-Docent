@@ -215,6 +215,19 @@ def get_cached_docent(city, road, lang="한국어"):
     except Exception as e:
         return None
 
+def get_ollama_models():
+    """로컬 Ollama의 모델 목록을 가져옵니다."""
+    if not OLLAMA_AVAILABLE:
+        return ["gemma4:e4b"]
+    try:
+        response = requests.get("http://localhost:11434/api/tags", timeout=2)
+        if response.status_code == 200:
+            models = response.json().get("models", [])
+            return [m["name"] for m in models]
+    except:
+        pass
+    return ["gemma4:e4b"] # 연결 실패 시 기본값
+
 init_db()
 
 def save_docent_cache(city, road, lang, script, audio_path):
@@ -225,39 +238,59 @@ def save_docent_cache(city, road, lang, script, audio_path):
     conn.commit()
     conn.close()
 
-def generate_docent_story(city, road, reason, api_key, target_lang="한국어"):
-    """최신 Google GenAI SDK와 Gemini 3 모델을 사용합니다."""
+def generate_docent_story(city, road, reason, api_key, target_lang="한국어", model_type="Gemini", ollama_model="gemma4:e4b"):
+    """최신 Google GenAI SDK(Gemini) 또는 Ollama(로컬)를 사용합니다."""
     lang_name = VOICE_CONFIG.get(target_lang, VOICE_CONFIG["한국어"])["lang_name"]
     
+    # 공통 프롬프트
+    prompt = f"""
+    당신은 친절한 '우리 동네 주소 전문 도슨트'이자 심층적인 지리·역사 분석 전문가입니다. 
+    제공된 [공식 유래]가 단순히 "예전부터 불린 도로명"처럼 모호할 경우, 
+    당신은 다음의 로직을 통해 훨씬 풍부하고 전문적인 깊이 있는 이야기를 들려주어야 합니다:
+
+    1. **뿌리 깊은 유래 추적**: 도로명이 위치한 '{city}'의 옛 지명 유래를 역사적(조선시대 행정구역, 1914년 행정구역 개편 등) 관점에서 분석하세요. 
+    2. **집성촌과 성씨의 흔적**: 이 길이 혹시 특정 성씨의 집성촌(예: 광산 김씨 등)에서 유래했을 가능성이 있는지 한국의 지명 문화적 특성을 고려해 설명하세요.
+    3. **낭만적인 전설 vs 엄밀한 사실**: 지역 주민들 사이에 전해지는 흥미로운 '민속적 설화'(예: 실제 금광이 있었다는 설)를 소개하되, 공식 기록에 근거한 유래를 함께 들려주며 사실과 낭만의 균형을 맞추세요.
+    4. **이미지적 연결**: '금(金)', '광(光)', '빛'처럼 이름에 반복되는 한자의 아름다운 의미를 해당 지역의 분위기와 연결하여 감성적인 스토리텔링을 완성하세요.
+
+    [데이터]
+    - 위치: {city}
+    - 길 이름: {road}
+    - 공식 유래: {reason}
+    - 출력 언어: {lang_name}
+
+    [대본 작성 미션]
+    1. 반드시 모든 내용을 '{lang_name}'로 작성해줘.
+    2. 첫마디는 반드시 다음과 같이 시작해: "{road} 도로명주소 부여의 의미를 알려주는 '도로명주소 AI 도슨트'입니다." (반갑습니다 같은 인사는 생략해)
+    3. 말투: 다정하고 조근조근한 이야기꾼(Storyteller)의 어조를 사용해 (~인 것이죠, ~전해진답니다 등).
+    4. 분량: 300~500자 (30초 내외 낭독용).
+    5. 금지어: "부여사유", "호 인용", "공식", "데이터", "반갑습니다"
+    """
+
+    if model_type == "Ollama":
+        if not OLLAMA_AVAILABLE:
+            return "⚠️ 현재 접속하신 환경은 클라우드 서버이므로 로컬 Ollama 모델을 호출할 수 없습니다. 좌측 설정에서 Gemini 모델을 선택해주세요."
+        try:
+            # 로컬 Ollama 호출
+            url = "http://localhost:11434/api/generate"
+            response = requests.post(url, json={
+                "model": ollama_model,
+                "prompt": prompt,
+                "stream": False
+            }, timeout=60)
+            if response.status_code == 200:
+                return response.json().get('response', '').strip()
+            else:
+                return f"Ollama 응답 오류: {response.text}"
+        except Exception as e:
+            return f"Ollama 연결 실패: {str(e)}"
+    
+    # 기본 Gemini 호출
     if not api_key:
         return f"안녕하세요! {city} {road}입니다. 이곳은 {reason}라는 의미가 담긴 길이에요. (API 키가 설정되지 않아 기본 메시지가 출력됩니다.)"
     
     try:
         client = genai.Client(api_key=api_key)
-        # 고도화된 역사 연구원 페르소나 적용 프롬프트
-        prompt = f"""
-        당신은 친절한 '우리 동네 주소 전문 도슨트'이자 심층적인 지리·역사 분석 전문가입니다. 
-        제공된 [공식 유래]가 단순히 "예전부터 불린 도로명"처럼 모호할 경우, 
-        당신은 다음의 로직을 통해 훨씬 풍부하고 전문적인 깊이 있는 이야기를 들려주어야 합니다:
-
-        1. **뿌리 깊은 유래 추적**: 도로명이 위치한 '{city}'의 옛 지명 유래를 역사적(조선시대 행정구역, 1914년 행정구역 개편 등) 관점에서 분석하세요. 
-        2. **집성촌과 성씨의 흔적**: 이 길이 혹시 특정 성씨의 집성촌(예: 광산 김씨 등)에서 유래했을 가능성이 있는지 한국의 지명 문화적 특성을 고려해 설명하세요.
-        3. **낭만적인 전설 vs 엄밀한 사실**: 지역 주민들 사이에 전해지는 흥미로운 '민속적 설화'(예: 실제 금광이 있었다는 설)를 소개하되, 공식 기록에 근거한 유래를 함께 들려주며 사실과 낭만의 균형을 맞추세요.
-        4. **이미지적 연결**: '금(金)', '광(光)', '빛'처럼 이름에 반복되는 한자의 아름다운 의미를 해당 지역의 분위기와 연결하여 감성적인 스토리텔링을 완성하세요.
-
-        [데이터]
-        - 위치: {city}
-        - 길 이름: {road}
-        - 공식 유래: {reason}
-        - 출력 언어: {lang_name}
-
-        [대본 작성 미션]
-        1. 반드시 모든 내용을 '{lang_name}'로 작성해줘.
-        2. 첫마디는 반드시 다음과 같이 시작해: "{road} 도로명주소 부여의 의미를 알려주는 '도로명주소 AI 도슨트'입니다." (반갑습니다 같은 인사는 생략해)
-        3. 말투: 다정하고 조근조근한 이야기꾼(Storyteller)의 어조를 사용해 (~인 것이죠, ~전해진답니다 등).
-        4. 분량: 300~500자 (30초 내외 낭독용).
-        5. 금지어: "부여사유", "호 인용", "공식", "데이터", "반갑습니다"
-        """
         # 사용자가 선호하는 Gemini 3 Flash Preview 모델로 복구합니다.
         # 인코딩 에러 방지를 위해 Content 객체를 명시적으로 생성하여 전달합니다.
         response = client.models.generate_content(
@@ -367,10 +400,29 @@ with st.sidebar:
     st.divider()
     
     st.header("⚙️ 설정")
-    input_key = st.text_input("Gemini API Key", value=st.session_state.api_key, type="password")
+    
+    # 모델 선택 메뉴는 환경에 상관없이 항상 표시
+    model_choice = st.radio("사용할 AI 모델 선택:", ["Gemini (온라인)", "Ollama (로컬)"], index=0, help="Ollama는 사용자의 PC(로컬) 환경에서만 작동합니다.")
+    
+    if "Ollama" in model_choice:
+        st.session_state.model_type = "Ollama"
+        if OLLAMA_AVAILABLE:
+            st.info("💻 로컬 환경 감지됨: PC에 설치된 Ollama 모델을 사용할 수 있습니다.")
+            # Ollama 모델 목록 동적 로딩
+            available_models = get_ollama_models()
+            selected_ollama_model = st.selectbox("Ollama 모델 선택:", available_models)
+            st.session_state.ollama_model = selected_ollama_model
+        else:
+            st.warning("⚠️ 주의: Ollama는 로컬(개발자 PC) 환경에서만 작동합니다. 현재 접속하신 클라우드 서버에서는 호출할 수 없습니다.")
+            st.session_state.ollama_model = "gemma4:e4b" # 기본값 유지
+    else:
+        st.session_state.model_type = "Gemini"
+        st.session_state.ollama_model = "gemma4:e4b"
+
+    input_key = st.text_input("Gemini API Key", value=st.session_state.api_key, type="password", help="Ollama 사용 시에는 입력하지 않으셔도 됩니다.")
     if st.button("설정 저장 (적용)", type="primary"):
         st.session_state.api_key = input_key
-        st.success("Gemini 2.0 모델 적용 완료!")
+        st.success("설정이 적용되었습니다!")
         st.rerun()
 
     st.divider()
@@ -503,7 +555,9 @@ if data:
                     st.markdown(f'<div class="docent-script-box" style="opacity: 0.7;">{docent_script}</div>', unsafe_allow_html=True)
                     if st.button("🎤 AI 해설 정식 생성하기", type="primary", use_container_width=True, key="fallback_gen_btn"):
                         with st.spinner("Gemini AI가 이 지명의 숨겨진 유래를 탐색하고 있습니다..."):
-                            docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang)
+                            model_type = st.session_state.get("model_type", "Gemini")
+                            ollama_model = st.session_state.get("ollama_model", "gemma4:e4b")
+                            docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model)
                             audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                             save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                             st.rerun()
@@ -521,14 +575,18 @@ if data:
                     # 수동 재생성 버튼 추가
                     if st.button("🔄 AI 해설 다시 만들기", key="re_gen_btn"):
                         with st.spinner("AI 도슨트가 새로운 시각으로 해설을 준비하고 있습니다..."):
-                            docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang)
+                            model_type = st.session_state.get("model_type", "Gemini")
+                            ollama_model = st.session_state.get("ollama_model", "gemma4:e4b")
+                            docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model)
                             audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                             save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                             st.rerun()
             else:
                 if st.button("🎤 AI 도슨트 해설 듣기", type="primary", use_container_width=True):
                     with st.spinner("도로명주소 AI 도슨트의 특별한 해설을 준비하고 있습니다. 잠시만 기다려 주세요..."):
-                        docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang)
+                        model_type = st.session_state.get("model_type", "Gemini")
+                        ollama_model = st.session_state.get("ollama_model", "gemma4:e4b")
+                        docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model)
                         audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                         save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                         st.info("✨ 새로운 해설이 생성 및 도감에 저장되었습니다.")
