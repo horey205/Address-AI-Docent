@@ -238,8 +238,8 @@ def save_docent_cache(city, road, lang, script, audio_path):
     conn.commit()
     conn.close()
 
-def generate_docent_story(city, road, reason, api_key, target_lang="한국어", model_type="Gemini", ollama_model="gemma4:e2b-it-qat"):
-    """최신 Google GenAI SDK(Gemini) 또는 Ollama(로컬)를 사용합니다."""
+def generate_docent_story(city, road, reason, api_key, target_lang="한국어", model_type="Gemini", ollama_model="gemma4:e2b-it-qat", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free"):
+    """최신 Google GenAI SDK(Gemini) 또는 Ollama(로컬) 또는 OpenRouter를 사용합니다."""
     lang_name = VOICE_CONFIG.get(target_lang, VOICE_CONFIG["한국어"])["lang_name"]
     
     # 공통 프롬프트
@@ -284,6 +284,28 @@ def generate_docent_story(city, road, reason, api_key, target_lang="한국어", 
                 return f"Ollama 응답 오류: {response.text}"
         except Exception as e:
             return f"Ollama 연결 실패: {str(e)}"
+            
+    elif model_type == "OpenRouter":
+        if not or_key:
+            return "⚠️ OpenRouter API 키가 설정되지 않았습니다. 설정에서 등록해 주세요."
+        try:
+            headers = {
+                "Authorization": f"Bearer {or_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": or_model,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ]
+            }
+            resp = requests.post("https://openrouter.ai/api/v1/chat/completions", json=payload, headers=headers, timeout=60)
+            if resp.status_code == 200:
+                return resp.json()['choices'][0]['message']['content'].strip()
+            else:
+                return f"OpenRouter 오류: {resp.status_code} - {resp.text}"
+        except Exception as e:
+            return f"OpenRouter 연결 실패: {str(e)}"
     
     # 기본 Gemini 호출
     if not api_key:
@@ -386,6 +408,10 @@ CURATIONS = {
 # 사이드바 설정
 if 'api_key' not in st.session_state:
     st.session_state.api_key = os.environ.get("GEMINI_API_KEY", "")
+if 'or_key' not in st.session_state:
+    st.session_state.or_key = os.environ.get("OPENROUTER_API_KEY", "")
+if 'or_model' not in st.session_state:
+    st.session_state.or_model = "nvidia/nemotron-3-super-120b-a12b:free"
 if 'search_input' not in st.session_state:
     st.session_state.search_input = ""
 if 'search_city' not in st.session_state:
@@ -402,7 +428,7 @@ with st.sidebar:
     st.header("⚙️ 설정")
     
     # 모델 선택 메뉴는 환경에 상관없이 항상 표시
-    model_choice = st.radio("사용할 AI 모델 선택:", ["Gemini (온라인)", "Ollama (로컬)"], index=0, help="Ollama는 사용자의 PC(로컬) 환경에서만 작동합니다.")
+    model_choice = st.radio("사용할 AI 모델 선택:", ["Gemini (온라인)", "OpenRouter (온라인)", "Ollama (로컬)"], index=0, help="Ollama는 사용자의 PC(로컬) 환경에서만 작동합니다.")
     
     if "Ollama" in model_choice:
         st.session_state.model_type = "Ollama"
@@ -415,13 +441,21 @@ with st.sidebar:
         else:
             st.warning("⚠️ 주의: Ollama는 로컬(개발자 PC) 환경에서만 작동합니다. 현재 접속하신 클라우드 서버에서는 호출할 수 없습니다.")
             st.session_state.ollama_model = "gemma4:e2b-it-qat" # 기본값 유지
+    elif "OpenRouter" in model_choice:
+        st.session_state.model_type = "OpenRouter"
+        st.session_state.ollama_model = "gemma4:e2b-it-qat"
     else:
         st.session_state.model_type = "Gemini"
         st.session_state.ollama_model = "gemma4:e2b-it-qat"
 
-    input_key = st.text_input("Gemini API Key", value=st.session_state.api_key, type="password", help="Ollama 사용 시에는 입력하지 않으셔도 됩니다.")
+    input_key = st.text_input("Gemini API Key", value=st.session_state.api_key, type="password", help="Gemini 사용 시에 필요합니다.")
+    input_or_key = st.text_input("OpenRouter API Key", value=st.session_state.or_key, type="password", help="OpenRouter 사용 시에 필요합니다.")
+    input_or_model = st.text_input("OpenRouter Model ID", value=st.session_state.or_model, help="기본: nvidia/nemotron-3-super-120b-a12b:free")
+    
     if st.button("설정 저장 (적용)", type="primary"):
         st.session_state.api_key = input_key
+        st.session_state.or_key = input_or_key
+        st.session_state.or_model = input_or_model
         st.success("설정이 적용되었습니다!")
         st.rerun()
 
@@ -557,7 +591,9 @@ if data:
                         with st.spinner("Gemini AI가 이 지명의 숨겨진 유래를 탐색하고 있습니다..."):
                             model_type = st.session_state.get("model_type", "Gemini")
                             ollama_model = st.session_state.get("ollama_model", "gemma4:e2b-it-qat")
-                            docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model)
+                            or_key = st.session_state.get("or_key", "")
+                            or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
+                            docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model, or_key, or_model)
                             audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                             save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                             st.rerun()
@@ -577,7 +613,9 @@ if data:
                         with st.spinner("AI 도슨트가 새로운 시각으로 해설을 준비하고 있습니다..."):
                             model_type = st.session_state.get("model_type", "Gemini")
                             ollama_model = st.session_state.get("ollama_model", "gemma4:e2b-it-qat")
-                            docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model)
+                            or_key = st.session_state.get("or_key", "")
+                            or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
+                            docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model, or_key, or_model)
                             audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                             save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                             st.rerun()
@@ -586,7 +624,9 @@ if data:
                     with st.spinner("도로명주소 AI 도슨트의 특별한 해설을 준비하고 있습니다. 잠시만 기다려 주세요..."):
                         model_type = st.session_state.get("model_type", "Gemini")
                         ollama_model = st.session_state.get("ollama_model", "gemma4:e2b-it-qat")
-                        docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model)
+                        or_key = st.session_state.get("or_key", "")
+                        or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
+                        docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model, or_key, or_model)
                         audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                         save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                         st.info("✨ 새로운 해설이 생성 및 도감에 저장되었습니다.")
