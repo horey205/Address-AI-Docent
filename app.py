@@ -218,7 +218,7 @@ def get_cached_docent(city, road, lang="한국어"):
 def get_ollama_models():
     """로컬 Ollama의 모델 목록을 가져옵니다."""
     if not OLLAMA_AVAILABLE:
-        return ["gemma4:e4b"]
+        return ["gemma4:e2b-it-qat"]
     try:
         response = requests.get("http://localhost:11434/api/tags", timeout=2)
         if response.status_code == 200:
@@ -226,7 +226,7 @@ def get_ollama_models():
             return [m["name"] for m in models]
     except:
         pass
-    return ["gemma4:e4b"] # 연결 실패 시 기본값
+    return ["gemma4:e2b-it-qat"] # 연결 실패 시 기본값
 
 init_db()
 
@@ -238,7 +238,7 @@ def save_docent_cache(city, road, lang, script, audio_path):
     conn.commit()
     conn.close()
 
-def generate_docent_story(city, road, reason, api_key, target_lang="한국어", model_type="Gemini", ollama_model="gemma4:e4b"):
+def generate_docent_story(city, road, reason, api_key, target_lang="한국어", model_type="Gemini", ollama_model="gemma4:e2b-it-qat"):
     """최신 Google GenAI SDK(Gemini) 또는 Ollama(로컬)를 사용합니다."""
     lang_name = VOICE_CONFIG.get(target_lang, VOICE_CONFIG["한국어"])["lang_name"]
     
@@ -414,10 +414,10 @@ with st.sidebar:
             st.session_state.ollama_model = selected_ollama_model
         else:
             st.warning("⚠️ 주의: Ollama는 로컬(개발자 PC) 환경에서만 작동합니다. 현재 접속하신 클라우드 서버에서는 호출할 수 없습니다.")
-            st.session_state.ollama_model = "gemma4:e4b" # 기본값 유지
+            st.session_state.ollama_model = "gemma4:e2b-it-qat" # 기본값 유지
     else:
         st.session_state.model_type = "Gemini"
-        st.session_state.ollama_model = "gemma4:e4b"
+        st.session_state.ollama_model = "gemma4:e2b-it-qat"
 
     input_key = st.text_input("Gemini API Key", value=st.session_state.api_key, type="password", help="Ollama 사용 시에는 입력하지 않으셔도 됩니다.")
     if st.button("설정 저장 (적용)", type="primary"):
@@ -556,7 +556,7 @@ if data:
                     if st.button("🎤 AI 해설 정식 생성하기", type="primary", use_container_width=True, key="fallback_gen_btn"):
                         with st.spinner("Gemini AI가 이 지명의 숨겨진 유래를 탐색하고 있습니다..."):
                             model_type = st.session_state.get("model_type", "Gemini")
-                            ollama_model = st.session_state.get("ollama_model", "gemma4:e4b")
+                            ollama_model = st.session_state.get("ollama_model", "gemma4:e2b-it-qat")
                             docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model)
                             audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                             save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
@@ -576,7 +576,7 @@ if data:
                     if st.button("🔄 AI 해설 다시 만들기", key="re_gen_btn"):
                         with st.spinner("AI 도슨트가 새로운 시각으로 해설을 준비하고 있습니다..."):
                             model_type = st.session_state.get("model_type", "Gemini")
-                            ollama_model = st.session_state.get("ollama_model", "gemma4:e4b")
+                            ollama_model = st.session_state.get("ollama_model", "gemma4:e2b-it-qat")
                             docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model)
                             audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                             save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
@@ -585,7 +585,7 @@ if data:
                 if st.button("🎤 AI 도슨트 해설 듣기", type="primary", use_container_width=True):
                     with st.spinner("도로명주소 AI 도슨트의 특별한 해설을 준비하고 있습니다. 잠시만 기다려 주세요..."):
                         model_type = st.session_state.get("model_type", "Gemini")
-                        ollama_model = st.session_state.get("ollama_model", "gemma4:e4b")
+                        ollama_model = st.session_state.get("ollama_model", "gemma4:e2b-it-qat")
                         docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model)
                         audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                         save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
