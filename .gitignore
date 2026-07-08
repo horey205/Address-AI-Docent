@@ -15,3 +15,7 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# App Cache & Assets
+docent_cache.db
+mp3/
