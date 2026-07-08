@@ -278,9 +278,9 @@ def generate_docent_story(city, road, reason, api_key, target_lang="한국어", 
     """최신 Google GenAI SDK(Gemini) 또는 Ollama(로컬) 또는 OpenRouter를 사용하며, Brave Search RAG를 적용합니다."""
     lang_name = VOICE_CONFIG.get(target_lang, VOICE_CONFIG["한국어"])["lang_name"]
     
-    # Brave Search 실행
+    # Brave Search 실행 (로컬 Ollama 모델의 지식 보완을 위해서만 수행)
     search_context = ""
-    if brave_key:
+    if brave_key and model_type == "Ollama":
         search_query = f"{city} {road} 역사 유래"
         search_context = search_brave(search_query, brave_key)
         
@@ -516,13 +516,11 @@ with st.sidebar:
     input_key = st.text_input("Gemini API Key", value=st.session_state.api_key, type="password", help="Gemini 사용 시에 필요합니다.")
     input_or_key = st.text_input("OpenRouter API Key", value=st.session_state.or_key, type="password", help="OpenRouter 사용 시에 필요합니다.")
     input_or_model = st.text_input("OpenRouter Model ID", value=st.session_state.or_model, help="기본: nvidia/nemotron-3-super-120b-a12b:free")
-    input_brave_key = st.text_input("Brave Search API Key", value=st.session_state.brave_key, type="password", help="Brave Search를 이용한 실시간 검색 증강(RAG) 기능에 사용됩니다.")
     
     if st.button("설정 저장 (적용)", type="primary"):
         st.session_state.api_key = input_key
         st.session_state.or_key = input_or_key
         st.session_state.or_model = input_or_model
-        st.session_state.brave_key = input_brave_key
         st.success("설정이 적용되었습니다!")
         st.rerun()
 
