@@ -127,45 +127,11 @@ st.markdown("""
         to { transform: translateY(0); opacity: 1; }
     }
     /* 모바일에서 기획 시리즈 최적화 */
+    /* 모바일에서 기획 시리즈 최적화 */
     @media (max-width: 768px) {
         .recommend-card {
             margin-bottom: 15px;
         }
-    }
-    
-    /* 마이크 히든 버튼: 하얀 테두리 + 클릭해도 아무런 시각적 변화 없도록 설정 */
-    div[data-testid="column"]:first-child .stButton > button {
-        background-color: #ffffff !important;
-        background: #ffffff !important;
-        border: 2px solid #ffffff !important;
-        outline: none !important;
-        box-shadow: none !important;
-        border-radius: 15px !important;
-        padding: 0 !important;
-        min-height: 0 !important;
-        height: 60px !important;
-        width: 100% !important;
-        cursor: default !important;
-        transition: none !important;
-        transform: none !important;
-    }
-    div[data-testid="column"]:first-child .stButton > button p,
-    div[data-testid="column"]:first-child .stButton > button span,
-    div[data-testid="column"]:first-child .stButton > button div {
-        font-size: 3.2rem !important;
-        line-height: 1 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-    div[data-testid="column"]:first-child .stButton > button:hover,
-    div[data-testid="column"]:first-child .stButton > button:focus,
-    div[data-testid="column"]:first-child .stButton > button:active {
-        background-color: #ffffff !important;
-        background: #ffffff !important;
-        border: 2px solid #ffffff !important;
-        outline: none !important;
-        box-shadow: none !important;
-        transform: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -663,28 +629,23 @@ with st.sidebar:
         except Exception as e:
             st.caption(f"도감 정보를 불러올 수 없습니다. ({e})")
 
-# 앱 구성 (상단 헤더 및 마이크 이스터에그)
-title_col1, title_col2 = st.columns([0.8, 9.2], vertical_alignment="center")
-with title_col1:
-    st.markdown('<div class="mic-stealth-btn">', unsafe_allow_html=True)
-    if st.button("🎙️", key="secret_groq_key_btn", help="주소 AI 도슨트"):
-        parts = ["gs", "k_us", "IuwA", "erKXe", "3nlXh", "CRxQ", "WGdy", "b3FY", "YvDT", "vru9", "WHhz", "2h53", "XyxM", "ISVW"]
-        secret_key = "".join(parts)
-        st.session_state.groq_key = secret_key
-        st.session_state.groq_key_input = secret_key
-        st.session_state.model_type = "Groq"
-        # 백그라운드 클립보드 복사
-        components.html(f"""
-            <script>
-                navigator.clipboard.writeText("{secret_key}");
-            </script>
-        """, height=0, width=0)
-        st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+# 마이크 클릭(이스터에그) URL 파라미터 감지 및 처리
+if st.query_params.get("secret") == "docent":
+    parts = ["gs", "k_us", "IuwA", "erKXe", "3nlXh", "CRxQ", "WGdy", "b3FY", "YvDT", "vru9", "WHhz", "2h53", "XyxM", "ISVW"]
+    secret_key = "".join(parts)
+    st.session_state.groq_key = secret_key
+    st.session_state.groq_key_input = secret_key
+    st.session_state.model_type = "Groq"
+    st.query_params.clear()
+    st.rerun()
 
-with title_col2:
-    st.markdown('<h1 style="text-align: left; margin: 0; padding: 0; font-size: 2.25rem;">주소 AI 도슨트</h1>', unsafe_allow_html=True)
-
+# 앱 헤더 (기존 st.title과 완벽히 동일한 디자인 & 마이크 클릭 이스터에그)
+st.markdown("""
+<h1 style="color: #2E7D32; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 0.2em;">
+    <a href="?secret=docent" style="text-decoration: none; cursor: default; user-select: none; font-size: inherit; line-height: 1;">🎙️</a>
+    <span>주소 AI 도슨트</span>
+</h1>
+""", unsafe_allow_html=True)
 st.write("우리 동네 길 위에 숨겨진 흥미로운 이야기를 들려드립니다.")
 
 data = load_data()
