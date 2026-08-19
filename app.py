@@ -260,18 +260,21 @@ def generate_docent_story(city, road, reason, target_lang="한국어", model_typ
     당신은 친절한 '우리 동네 주소 전문 도슨트'이자 역사·지리 스토리텔링 전문가입니다.
     제공된 [공식 유래] 데이터를 바탕으로, 해당 도로명이 지닌 가치와 의미를 사용자에게 쉽고 흥미롭게 들려주세요.
 
-    [작성 규칙 - 엄격 준수]
-    1. **절대 생각 과정(Thinking process, Chain of thought 등)을 출력하지 마세요.** 오직 최종 도슨트 대본만 출력하세요.
+    [작성 규칙 - 절대 엄수]
+    1. **오직 최종 낭독 대본만 출력하세요.** 
+       - 어떠한 분석, 생각 과정, 글자 수 계산(Character Count Check), 해설 주석도 절대 적지 마세요.
+       - 첫 단어부터 마지막 단어까지 순수한 도슨트 오디오 대본만 작성해야 합니다.
     2. **유래 기반의 사실적 스토리텔링**:
-       - 공식 유래({reason})가 구체적인 역사적 사건, 인물, 혹은 국제 교류(예: 테헤란로) 등 명확한 사실에 기반한 경우, 억지 전설이나 성씨 집성촌 같은 무관한 가설을 절대 꾸며내어 덧붙이지 마세요. 오직 해당 사실과 그 역사적/문화적 의의에 집중하세요.
-       - 만약 공식 유래가 "옛 지명에서 유래"와 같이 단순할 때만, 해당 지역({city})의 특성이나 지명 한자의 자연스러운 의미를 엮어 친근하게 설명하세요.
+       - 공식 유래({reason})가 명확한 역사적 사실에 기반한 경우 억지 가설을 꾸며내지 마세요.
+       - 공식 유래가 단순할 때만 지역({city})의 특성이나 지명 한자 의미를 부드럽게 엮어 설명하세요.
     3. **출력 언어 및 첫마디**:
-       - 반드시 모든 내용을 '{lang_name}'로 유창하게 작성해 주세요.
-       - 첫마디는 반드시 다음과 같이 시작하세요: "{intro_phrase}"
+       - 반드시 모든 내용을 '{lang_name}'로 작성하세요.
+       - 첫마디는 반드시 "{intro_phrase}"로 시작하세요.
     4. **말투 및 분량**:
-       - 다정하고 조근조근한 이야기꾼(Storyteller)의 어조를 사용하세요.
-       - 분량은 300~500자 내외(30초 내외 낭독용)로 간결하게 작성하세요.
-    5. **금지어**: "부여사유", "호 인용", "공식", "데이터", "Here's a thinking process"
+       - 조근조근하고 따뜻한 이야기꾼(Storyteller) 어조로 300~400자 내외로 작성하세요.
+    5. **금지 사항**:
+       - "부여사유", "호 인용", "공식", "데이터"라는 단어 금지
+       - 글자 수 확인, 분석 메모, 번호 매기기, 소제목 절대 금지
 
     [데이터]
     - 위치: {city}
@@ -292,22 +295,35 @@ def generate_docent_story(city, road, reason, target_lang="한국어", model_typ
             payload = {
                 "model": groq_model,
                 "messages": [
-                    {"role": "system", "content": "You are a professional local tour docent and historical storyteller. Output ONLY the final docent script in the requested language. Do NOT output any thinking process, analysis, or explanation."},
+                    {"role": "system", "content": "You are a professional audio tour docent. Output ONLY the raw spoken script without any markdown headers, thinking processes, character count checks, or analysis."},
                     {"role": "user", "content": prompt}
                 ],
-                "temperature": 0.7,
-                "max_tokens": 1000
+                "temperature": 0.5,
+                "max_tokens": 800
             }
             resp = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=30)
             if resp.status_code == 200:
                 raw_text = resp.json()['choices'][0]['message']['content'].strip()
-                # <think>...</think> 태그나 "Here's a thinking process:" 등 생각 과정 제거
                 import re
-                cleaned = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL)
-                if "Here's a thinking process" in cleaned:
-                    parts = cleaned.split("\n\n")
-                    # 생각 과정 이후의 실제 이야기 본문만 추출
-                    cleaned = parts[-1] if len(parts) > 1 else cleaned
+                
+                # 1) <think>...</think> 태그 제거
+                cleaned = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL).strip()
+                
+                # 2) 따옴표로 감싸진 대본이 있고 그 뒤에 분석(Count/Check)이 붙은 경우 본문만 추출
+                quote_match = re.search(r'["“](.*?)["”]', cleaned, flags=re.DOTALL)
+                if quote_match and len(quote_match.group(1).strip()) > 80:
+                    # 따옴표 내부가 충분히 긴 스크립트라면 그것을 우선 채택
+                    cleaned = quote_match.group(1).strip()
+                else:
+                    # 3) 'Character Count', 'Count:', 'Draft:' 등의 분석 키워드가 나타나기 전까지만 자르기
+                    stop_keywords = [
+                        "Character Count", "Character count", "Count Check", "Count:", 
+                        "Let's count", "Let’s count", "Here's a thinking process", "Analysis:"
+                    ]
+                    for kw in stop_keywords:
+                        if kw in cleaned:
+                            cleaned = cleaned.split(kw)[0].strip()
+                
                 return cleaned.strip()
             else:
                 return f"Groq API 오류 ({resp.status_code}): {resp.text}"
