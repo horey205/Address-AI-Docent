@@ -634,19 +634,20 @@ if data:
             if cached:
                 docent_script, audio_file_path = cached
                 
-                # 서버 환경에 맞게 오디오 경로 재탐색 (파일명이 조금 달라도 도로명을 포함하면 찾음)
+                # 서버 환경에 맞게 오디오 경로 재탐색 (파일명이 조금 달라도 도로명과 언어가 일치하면 찾음)
                 audio_filename = os.path.basename(audio_file_path)
                 clean_road = final_row['도로명'].replace(" ", "")
+                current_lang_name = VOICE_CONFIG.get(current_lang, {}).get("lang_name", "")
                 
                 # 1. 원래 경로로 먼저 시도
                 server_audio_path = os.path.join(BASE_DIR, "mp3", audio_filename)
                 
-                # 2. 실패 시, mp3 폴더 내에서 '도로명'이 들어간 파일 강제 탐색
+                # 2. 실패 시, mp3 폴더 내에서 '도로명'과 '언어명'이 모두 들어간 파일 강제 탐색
                 if not os.path.exists(server_audio_path):
                     mp3_dir = os.path.join(BASE_DIR, "mp3")
                     if os.path.exists(mp3_dir):
                         for f in os.listdir(mp3_dir):
-                            if clean_road in f and f.endswith(".mp3"):
+                            if clean_road in f and current_lang_name in f and f.endswith(".mp3"):
                                 server_audio_path = os.path.join(mp3_dir, f)
                                 break
                 if is_fallback:
