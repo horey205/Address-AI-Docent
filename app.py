@@ -630,22 +630,15 @@ if data:
         st.session_state.search_input = st.session_state.search_keyword
         st.session_state.search_city = ""
 
-    col_input, col_clear = st.columns([6, 1])
-    with col_input:
-        st.text_input(
-            "어떤 길의 이야기가 궁금하신가요?", 
-            key="search_keyword",
-            on_change=on_search_change,
-            placeholder="예: 세종대로, 사슴벌레로, 가리내로...",
-            label_visibility="collapsed"
-        )
-    with col_clear:
-        if st.button("🗑️ 지우기", use_container_width=True):
-            st.session_state.search_keyword = ""
-            st.session_state.search_input = ""
-            st.session_state.search_city = ""
-            st.rerun()
-            
+    st.text_input(
+        "어떤 길의 이야기가 궁금하신가요?", 
+        key="search_keyword",
+        on_change=on_search_change,
+        placeholder="예: 세종대로, 사슴벌레로, 테헤란로...",
+        label_visibility="collapsed"
+    )
+    st.caption("💡 도로명 또는 단어를 입력한 후 Enter를 누르면 바로 검색됩니다.")
+    
     search_query = st.session_state.get("search_keyword", "").strip()
     
     if search_query:
