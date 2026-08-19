@@ -11,12 +11,15 @@ from google.genai import types
 import uuid
 import requests
 import time
-# Ollama는 로컬 전용이므로 서버 에러 방지를 위해 예외 처리
-try:
-    from ollama import Client as OllamaClient
-    OLLAMA_AVAILABLE = True
-except ImportError:
-    OLLAMA_AVAILABLE = False
+# 로컬 Ollama 접속 가능 여부 체크
+def check_ollama_available():
+    try:
+        response = requests.get("http://localhost:11434/", timeout=1)
+        return True
+    except:
+        return False
+
+OLLAMA_AVAILABLE = check_ollama_available()
 
 # 페이지 설정
 st.set_page_config(page_title="주소 AI 도슨트", page_icon="🎙️", layout="centered")
@@ -154,6 +157,33 @@ def load_data():
     with open(JSON_FILE, 'r', encoding='utf-8') as f:
         return json.load(f)
 
+def search_brave(query, api_key):
+    """Brave Search API를 사용해 웹 검색 결과를 가져옵니다."""
+    if not api_key:
+        return ""
+    try:
+        url = "https://api.search.brave.com/res/v1/web/search"
+        headers = {
+            "Accept": "application/json",
+            "X-Subscription-Token": api_key
+        }
+        params = {
+            "q": query,
+            "count": 3
+        }
+        resp = requests.get(url, headers=headers, params=params, timeout=5)
+        if resp.status_code == 200:
+            results = resp.json().get("web", {}).get("results", [])
+            snippets = []
+            for r in results:
+                title = r.get("title", "")
+                desc = r.get("description", "")
+                snippets.append(f"- {title}: {desc}")
+            return "\n".join(snippets)
+    except Exception as e:
+        print(f"Brave Search Error: {e}")
+    return ""
+
 # 언어별 설정 (목소리 및 코드)
 VOICE_CONFIG = {
     "한국어": {"voice": "ko-KR-HyunsuMultilingualNeural", "lang_name": "Korean"},
@@ -217,16 +247,22 @@ def get_cached_docent(city, road, lang="한국어"):
 
 def get_ollama_models():
     """로컬 Ollama의 모델 목록을 가져옵니다."""
+    default_models = ["gemma4", "gemma4:e2b-it-qat"]
     if not OLLAMA_AVAILABLE:
-        return ["gemma4:e2b-it-qat"]
+        return default_models
     try:
         response = requests.get("http://localhost:11434/api/tags", timeout=2)
         if response.status_code == 200:
             models = response.json().get("models", [])
-            return [m["name"] for m in models]
+            fetched_models = [m["name"] for m in models]
+            # 기본 탑재 모델이 결과에 없다면 상단에 병합
+            for dm in default_models:
+                if dm not in fetched_models:
+                    fetched_models.append(dm)
+            return fetched_models
     except:
         pass
-    return ["gemma4:e2b-it-qat"] # 연결 실패 시 기본값
+    return default_models # 연결 실패 시 기본값
 
 init_db()
 
@@ -238,33 +274,48 @@ def save_docent_cache(city, road, lang, script, audio_path):
     conn.commit()
     conn.close()
 
-def generate_docent_story(city, road, reason, api_key, target_lang="한국어", model_type="Gemini", ollama_model="gemma4:e2b-it-qat", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free"):
-    """최신 Google GenAI SDK(Gemini) 또는 Ollama(로컬) 또는 OpenRouter를 사용합니다."""
+def generate_docent_story(city, road, reason, api_key, target_lang="한국어", model_type="Gemini", ollama_model="gemma4:e2b-it-qat", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free", brave_key=""):
+    """최신 Google GenAI SDK(Gemini) 또는 Ollama(로컬) 또는 OpenRouter를 사용하며, Brave Search RAG를 적용합니다."""
     lang_name = VOICE_CONFIG.get(target_lang, VOICE_CONFIG["한국어"])["lang_name"]
+    
+    # Brave Search 실행 (로컬 Ollama 모델의 지식 보완을 위해서만 수행)
+    search_context = ""
+    if brave_key and model_type == "Ollama":
+        search_query = f"{city} {road} 역사 유래"
+        search_context = search_brave(search_query, brave_key)
+        
+    search_info_block = ""
+    if search_context:
+        search_info_block = f"""
+    [실시간 검색 참고 정보 (인터넷 검색 결과)]
+    {search_context}
+    
+    * 중요: 위 실시간 검색 정보를 최우선 팩트로 활용하여 공식 유래의 역사적 맥락과 디테일을 더욱 풍부하게 보완하되, 검색 결과와 전혀 무관한 낭설은 제외하세요.
+    """
     
     # 공통 프롬프트
     prompt = f"""
-    당신은 친절한 '우리 동네 주소 전문 도슨트'이자 심층적인 지리·역사 분석 전문가입니다. 
-    제공된 [공식 유래]가 단순히 "예전부터 불린 도로명"처럼 모호할 경우, 
-    당신은 다음의 로직을 통해 훨씬 풍부하고 전문적인 깊이 있는 이야기를 들려주어야 합니다:
-
-    1. **뿌리 깊은 유래 추적**: 도로명이 위치한 '{city}'의 옛 지명 유래를 역사적(조선시대 행정구역, 1914년 행정구역 개편 등) 관점에서 분석하세요. 
-    2. **집성촌과 성씨의 흔적**: 이 길이 혹시 특정 성씨의 집성촌(예: 광산 김씨 등)에서 유래했을 가능성이 있는지 한국의 지명 문화적 특성을 고려해 설명하세요.
-    3. **낭만적인 전설 vs 엄밀한 사실**: 지역 주민들 사이에 전해지는 흥미로운 '민속적 설화'(예: 실제 금광이 있었다는 설)를 소개하되, 공식 기록에 근거한 유래를 함께 들려주며 사실과 낭만의 균형을 맞추세요.
-    4. **이미지적 연결**: '금(金)', '광(光)', '빛'처럼 이름에 반복되는 한자의 아름다운 의미를 해당 지역의 분위기와 연결하여 감성적인 스토리텔링을 완성하세요.
+    당신은 친절한 '우리 동네 주소 전문 도슨트'이자 역사·지리 스토리텔링 전문가입니다.
+    제공된 [공식 유래] 데이터와 [실시간 검색 참고 정보]를 바탕으로, 해당 도로명이 지닌 가치와 의미를 사용자에게 쉽고 흥미롭게 들려주세요.
+    {search_info_block}
+    [작성 규칙]
+    1. **유래 기반의 사실적 스토리텔링**:
+       - 공식 유래({reason})가 구체적인 역사적 사건, 인물, 혹은 국제 교류(예: 테헤란로) 등 명확한 사실에 기반한 경우, 억지 전설이나 성씨 집성촌 같은 무관한 가설을 절대 꾸며내어 덧붙이지 마세요. 오직 해당 사실과 그 역사적/문화적 의의에 집중하세요.
+       - 만약 공식 유래가 "옛 지명에서 유래"와 같이 매우 단순하고 모호할 때만, 해당 지역({city})의 행정구역 변천사나 지리학적 특성, 혹은 지명 한자의 자연스러운 의미를 엮어 친근하게 설명하세요.
+    2. **자연스러운 맥락 유지**: 없는 사실을 지어내어(예: 존재하지 않는 금광 설화나 집성촌 등) 강제로 끼워 맞추지 말고, 흐름이 매끄럽고 사실에 부합하도록 구성하세요.
+    3. **출력 언어 및 첫마디**:
+       - 반드시 모든 내용을 '{lang_name}'로 작성해 주세요.
+       - 첫마디는 반드시 다음과 같이 시작하세요: "{road} 도로명주소 부여의 의미를 알려주는 '도로명주소 AI 도슨트'입니다." (반갑습니다 같은 인사는 생략)
+    4. **말투 및 분량**:
+       - 다정하고 조근조근한 이야기꾼(Storyteller)의 어조를 사용하세요 (~인 것이죠, ~전해진답니다 등).
+       - 분량은 300~500자 내외(30초 내외 낭독용)로 간결하면서도 여운을 주도록 작성하세요.
+    5. **금지어**: "부여사유", "호 인용", "공식", "데이터", "반갑습니다"
 
     [데이터]
     - 위치: {city}
     - 길 이름: {road}
     - 공식 유래: {reason}
     - 출력 언어: {lang_name}
-
-    [대본 작성 미션]
-    1. 반드시 모든 내용을 '{lang_name}'로 작성해줘.
-    2. 첫마디는 반드시 다음과 같이 시작해: "{road} 도로명주소 부여의 의미를 알려주는 '도로명주소 AI 도슨트'입니다." (반갑습니다 같은 인사는 생략해)
-    3. 말투: 다정하고 조근조근한 이야기꾼(Storyteller)의 어조를 사용해 (~인 것이죠, ~전해진답니다 등).
-    4. 분량: 300~500자 (30초 내외 낭독용).
-    5. 금지어: "부여사유", "호 인용", "공식", "데이터", "반갑습니다"
     """
 
     if model_type == "Ollama":
@@ -406,12 +457,18 @@ CURATIONS = {
 }
 
 # 사이드바 설정
+if 'model_type' not in st.session_state:
+    st.session_state.model_type = "Ollama"
+if 'ollama_model' not in st.session_state:
+    st.session_state.ollama_model = "gemma4"
 if 'api_key' not in st.session_state:
     st.session_state.api_key = os.environ.get("GEMINI_API_KEY", "")
 if 'or_key' not in st.session_state:
     st.session_state.or_key = os.environ.get("OPENROUTER_API_KEY", "")
 if 'or_model' not in st.session_state:
     st.session_state.or_model = "nvidia/nemotron-3-super-120b-a12b:free"
+if 'brave_key' not in st.session_state:
+    st.session_state.brave_key = os.environ.get("BRAVE_API_KEY", "BSAbVKCiRxhMr2OMRFjZvlpFJNCptdU")
 if 'search_input' not in st.session_state:
     st.session_state.search_input = ""
 if 'search_city' not in st.session_state:
@@ -428,7 +485,7 @@ with st.sidebar:
     st.header("⚙️ 설정")
     
     # 모델 선택 메뉴는 환경에 상관없이 항상 표시
-    model_choice = st.radio("사용할 AI 모델 선택:", ["Gemini (온라인)", "OpenRouter (온라인)", "Ollama (로컬)"], index=0, help="Ollama는 사용자의 PC(로컬) 환경에서만 작동합니다.")
+    model_choice = st.radio("사용할 AI 모델 선택:", ["Gemini (온라인)", "OpenRouter (온라인)", "Ollama (로컬)"], index=2, help="Ollama는 사용자의 PC(로컬) 환경에서만 작동합니다.")
     
     if "Ollama" in model_choice:
         st.session_state.model_type = "Ollama"
@@ -437,16 +494,24 @@ with st.sidebar:
             # Ollama 모델 목록 동적 로딩
             available_models = get_ollama_models()
             selected_ollama_model = st.selectbox("Ollama 모델 선택:", available_models)
-            st.session_state.ollama_model = selected_ollama_model
+            
+            # 사용자가 직접 모델명을 입력할 수 있도록 텍스트 입력창 추가
+            custom_ollama_model = st.text_input(
+                "Ollama 모델명 직접 입력 (목록에 없을 때 사용):", 
+                value=selected_ollama_model,
+                help="로컬 Ollama에 등록된 모델명(예: gemma4)을 정확하게 적어주세요."
+            ).strip()
+            
+            st.session_state.ollama_model = custom_ollama_model if custom_ollama_model else selected_ollama_model
         else:
             st.warning("⚠️ 주의: Ollama는 로컬(개발자 PC) 환경에서만 작동합니다. 현재 접속하신 클라우드 서버에서는 호출할 수 없습니다.")
-            st.session_state.ollama_model = "gemma4:e2b-it-qat" # 기본값 유지
+            st.session_state.ollama_model = "gemma4" # 기본값 유지
     elif "OpenRouter" in model_choice:
         st.session_state.model_type = "OpenRouter"
-        st.session_state.ollama_model = "gemma4:e2b-it-qat"
+        st.session_state.ollama_model = "gemma4"
     else:
         st.session_state.model_type = "Gemini"
-        st.session_state.ollama_model = "gemma4:e2b-it-qat"
+        st.session_state.ollama_model = "gemma4"
 
     input_key = st.text_input("Gemini API Key", value=st.session_state.api_key, type="password", help="Gemini 사용 시에 필요합니다.")
     input_or_key = st.text_input("OpenRouter API Key", value=st.session_state.or_key, type="password", help="OpenRouter 사용 시에 필요합니다.")
@@ -593,7 +658,7 @@ if data:
                             ollama_model = st.session_state.get("ollama_model", "gemma4:e2b-it-qat")
                             or_key = st.session_state.get("or_key", "")
                             or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
-                            docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model, or_key, or_model)
+                            docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model, or_key, or_model, st.session_state.brave_key)
                             audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                             save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                             st.rerun()
@@ -615,7 +680,7 @@ if data:
                             ollama_model = st.session_state.get("ollama_model", "gemma4:e2b-it-qat")
                             or_key = st.session_state.get("or_key", "")
                             or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
-                            docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model, or_key, or_model)
+                            docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model, or_key, or_model, st.session_state.brave_key)
                             audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                             save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                             st.rerun()
@@ -626,7 +691,7 @@ if data:
                         ollama_model = st.session_state.get("ollama_model", "gemma4:e2b-it-qat")
                         or_key = st.session_state.get("or_key", "")
                         or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
-                        docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model, or_key, or_model)
+                        docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model, or_key, or_model, st.session_state.brave_key)
                         audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                         save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                         st.info("✨ 새로운 해설이 생성 및 도감에 저장되었습니다.")
