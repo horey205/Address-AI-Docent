@@ -245,6 +245,7 @@ def save_docent_cache(city, road, lang, script, audio_path):
 
 def generate_docent_story(city, road, reason, target_lang="한국어", model_type="Groq", groq_key="", groq_model="llama-3.3-70b-versatile", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free", api_key=""):
     """초고속 무료 Groq(1위) 또는 다기능 OpenRouter(3위)를 활용하여 최상의 다국어 도슨트 해설을 생성합니다."""
+    lang_name = VOICE_CONFIG.get(target_lang, VOICE_CONFIG["한국어"])["lang_name"]
     # 언어별 설정 (자연스러운 로컬 도슨트 대본)
     lang_prompts = {
         "Korean": f"""당신은 다정하고 품격 있는 '우리 동네 전문 AI 도슨트'입니다.
