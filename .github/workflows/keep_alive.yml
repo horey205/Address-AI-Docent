@@ -12,10 +12,17 @@ jobs:
     steps:
       - name: Ping Streamlit App
         run: |
-          response_code=$(curl -s -o /dev/null -w "%{http_code}" -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "https://juso-ai-docent.streamlit.app/")
-          echo "Streamlit App Response Code: $response_code"
-          if [ "$response_code" -ge 200 ] && [ "$response_code" -lt 400 ]; then
-            echo "Successfully pinged https://juso-ai-docent.streamlit.app/"
-          else
-            echo "Warning: Response code was $response_code"
-          fi
+          echo "Pinging Streamlit App..."
+          python -c "
+          import urllib.request
+          req = urllib.request.Request(
+              'https://juso-ai-docent.streamlit.app/',
+              headers={'User-Agent': 'Mozilla/5.0'}
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=30) as res:
+                  print(f'Success! Status code: {res.getcode()}')
+          except Exception as e:
+              print(f'Ping executed with result: {e}')
+          "
+
