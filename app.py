@@ -511,6 +511,8 @@ if st.query_params.get("secret") == "docent":
     st.session_state.groq_key = secret_key
     st.session_state.model_type = "Groq"
     st.session_state.secret_injected = True
+    st.query_params.clear()
+    st.rerun()
 
 @st.cache_data(ttl=600)
 def get_groq_models_cached(api_key):
