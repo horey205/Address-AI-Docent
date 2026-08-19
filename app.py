@@ -295,34 +295,23 @@ def generate_docent_story(city, road, reason, target_lang="한국어", model_typ
             payload = {
                 "model": groq_model,
                 "messages": [
-                    {"role": "system", "content": "You are a professional audio tour docent. Output ONLY the raw spoken script without any markdown headers, thinking processes, character count checks, or analysis."},
+                    {"role": "system", "content": "You are a professional local audio tour docent. Output only the warm storytelling script for visitors in the requested language."},
                     {"role": "user", "content": prompt}
                 ],
-                "temperature": 0.5,
-                "max_tokens": 800
+                "temperature": 0.7,
+                "max_tokens": 1500
             }
             resp = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=30)
             if resp.status_code == 200:
                 raw_text = resp.json()['choices'][0]['message']['content'].strip()
                 import re
                 
-                # 1) <think>...</think> 태그 제거
+                # <think>...</think> 태그만 깔끔하게 제거
                 cleaned = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL).strip()
                 
-                # 2) 따옴표로 감싸진 대본이 있고 그 뒤에 분석(Count/Check)이 붙은 경우 본문만 추출
-                quote_match = re.search(r'["“](.*?)["”]', cleaned, flags=re.DOTALL)
-                if quote_match and len(quote_match.group(1).strip()) > 80:
-                    # 따옴표 내부가 충분히 긴 스크립트라면 그것을 우선 채택
-                    cleaned = quote_match.group(1).strip()
-                else:
-                    # 3) 'Character Count', 'Count:', 'Draft:' 등의 분석 키워드가 나타나기 전까지만 자르기
-                    stop_keywords = [
-                        "Character Count", "Character count", "Count Check", "Count:", 
-                        "Let's count", "Let’s count", "Here's a thinking process", "Analysis:"
-                    ]
-                    for kw in stop_keywords:
-                        if kw in cleaned:
-                            cleaned = cleaned.split(kw)[0].strip()
+                # 만약 think 제거 후 비어있다면 원본 텍스트 유지
+                if not cleaned:
+                    cleaned = raw_text
                 
                 return cleaned.strip()
             else:
