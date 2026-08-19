@@ -306,12 +306,26 @@ def generate_docent_story(city, road, reason, target_lang="한국어", model_typ
                 raw_text = resp.json()['choices'][0]['message']['content'].strip()
                 import re
                 
-                # <think>...</think> 태그만 깔끔하게 제거
+                # 1) <think>...</think> 태그 제거
                 cleaned = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL).strip()
                 
-                # 만약 think 제거 후 비어있다면 원본 텍스트 유지
-                if not cleaned:
-                    cleaned = raw_text
+                # 2) 핵심: 모델이 생각 과정 끝에 intro_phrase로 대본을 시작하므로, intro_phrase 이후 내용 추출
+                if intro_phrase in cleaned:
+                    # intro_phrase가 나타나는 마지막 위치(또는 첫 위치)부터 본문으로 간주
+                    parts = cleaned.split(intro_phrase)
+                    # intro_phrase 뒤에 실제 대본이 위치함
+                    script_body = intro_phrase + parts[-1]
+                    
+                    # 3) 대본 뒤에 붙은 "Count:", "Character Count", "Let's count" 등 분석 제거
+                    stop_keywords = [
+                        "Count:", "Character Count", "Character count", "Count Check", 
+                        "Let's count", "Let’s count", "Draft Construction", "Deconstruct"
+                    ]
+                    for kw in stop_keywords:
+                        if kw in script_body:
+                            script_body = script_body.split(kw)[0].strip()
+                    
+                    cleaned = script_body
                 
                 return cleaned.strip()
             else:
