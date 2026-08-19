@@ -6,8 +6,6 @@ import asyncio
 import edge_tts
 import sqlite3
 import base64
-from google import genai
-from google.genai import types
 import uuid
 import requests
 import time
@@ -323,24 +321,7 @@ def generate_docent_story(city, road, reason, target_lang="한국어", model_typ
         except Exception as e:
             return f"OpenRouter 연결 실패: {str(e)}"
     
-    # 3. Gemini 예비 옵션 (키가 있을 때만 호출)
-    if not api_key:
-        return f"안녕하세요! {city} {road}입니다. 이곳은 {reason}라는 의미가 담긴 길이에요. (API 키가 설정되지 않아 기본 메시지가 출력됩니다.)"
-    
-    try:
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[
-                types.Content(
-                    role="user",
-                    parts=[types.Part.from_text(text=prompt)]
-                )
-            ]
-        )
-        return response.text.strip()
-    except Exception as e:
-        return f"해설 생성 중 오류가 발생했습니다.\n상세: {str(e)}"
+    return f"안녕하세요! {city} {road}입니다. 이곳은 {reason}라는 의미가 담긴 길이에요. (API 키가 설정되지 않아 기본 메시지가 출력됩니다.)"
 
 # 기획 시리즈 목록 (도슨트 큐레이션)
 CURATIONS = {
@@ -428,8 +409,6 @@ if 'or_key' not in st.session_state:
     st.session_state.or_key = os.environ.get("OPENROUTER_API_KEY", "")
 if 'or_model' not in st.session_state:
     st.session_state.or_model = "nvidia/nemotron-3-super-120b-a12b:free"
-if 'api_key' not in st.session_state:
-    st.session_state.api_key = os.environ.get("GEMINI_API_KEY", "")
 if 'search_input' not in st.session_state:
     st.session_state.search_input = ""
 if 'search_city' not in st.session_state:
@@ -445,10 +424,10 @@ with st.sidebar:
     
     st.header("⚙️ AI 모델 설정")
     
-    # 추천 모델 순위 기반 라디오 버튼
+    # 2가지 무료 모델 옵션
     model_choice = st.radio(
         "사용할 AI 엔진 선택:", 
-        ["⚡ Groq (1순위: 초고속 무료 Llama 3.3)", "🌐 OpenRouter (3순위: 다양한 무료 모델)", "✨ Gemini (예비용)"],
+        ["⚡ Groq (1순위: 초고속 무료 Llama 3.3)", "🌐 OpenRouter (3순위: 다양한 무료 모델)"],
         index=0
     )
     
@@ -465,9 +444,8 @@ with st.sidebar:
         st.session_state.groq_model = selected_groq_model
         input_or_key = st.session_state.or_key
         input_or_model = st.session_state.or_model
-        input_gemini_key = st.session_state.api_key
         
-    elif "OpenRouter" in model_choice:
+    else:
         st.session_state.model_type = "OpenRouter"
         input_groq_key = st.session_state.groq_key
         input_or_key = st.text_input(
@@ -477,19 +455,11 @@ with st.sidebar:
             help="openrouter.ai 에서 발급받은 키를 입력하세요."
         )
         input_or_model = st.text_input("OpenRouter Model ID", value=st.session_state.or_model, help="기본: nvidia/nemotron-3-super-120b-a12b:free")
-        input_gemini_key = st.session_state.api_key
-    else:
-        st.session_state.model_type = "Gemini"
-        input_groq_key = st.session_state.groq_key
-        input_or_key = st.session_state.or_key
-        input_or_model = st.session_state.or_model
-        input_gemini_key = st.text_input("Gemini API Key", value=st.session_state.api_key, type="password", help="aistudio.google.com 무료 키")
     
     if st.button("설정 저장 (적용)", type="primary"):
         st.session_state.groq_key = input_groq_key
         st.session_state.or_key = input_or_key
         st.session_state.or_model = input_or_model
-        st.session_state.api_key = input_gemini_key
         st.success("설정이 적용되었습니다!")
         st.rerun()
 
