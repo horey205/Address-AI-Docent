@@ -487,7 +487,7 @@ with st.sidebar:
     # 2가지 무료 모델 옵션
     model_choice = st.radio(
         "사용할 AI 엔진 선택:", 
-        ["⚡ Groq (1순위: 초고속 무료 Llama 3.3)", "🌐 OpenRouter (3순위: 다양한 무료 모델)"],
+        ["⚡ Groq (초고속 무료 AI)", "🌐 OpenRouter (오픈소스 무료 AI)"],
         index=0
     )
     
