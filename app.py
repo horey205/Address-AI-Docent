@@ -436,7 +436,7 @@ if 'model_type' not in st.session_state:
 if 'groq_key' not in st.session_state:
     st.session_state.groq_key = os.environ.get("GROQ_API_KEY", "")
 if 'groq_model' not in st.session_state:
-    st.session_state.groq_model = "gemma2-9b-it"
+    st.session_state.groq_model = "openai/gpt-oss-120b"
 if 'or_key' not in st.session_state:
     st.session_state.or_key = os.environ.get("OPENROUTER_API_KEY", "")
 if 'or_model' not in st.session_state:
@@ -482,23 +482,27 @@ with st.sidebar:
                 )
                 if res.status_code == 200:
                     models_data = res.json().get("data", [])
-                    # chat 기능 지원 모델만 추출
-                    groq_dynamic_models = sorted([m["id"] for m in models_data if "whisper" not in m["id"]])
+                    # whisper 및 guard 모델 제외하고 텍스트 생성 모델만 추출
+                    groq_dynamic_models = sorted([
+                        m["id"] for m in models_data 
+                        if "whisper" not in m["id"] and "guard" not in m["id"]
+                    ])
             except:
                 pass
         
         fallback_models = [
-            "llama3-8b-8192",
-            "llama3-70b-8192",
-            "gemma2-9b-it",
-            "mixtral-8x7b-32768",
-            "qwen-2.5-32b",
-            "deepseek-r1-distill-llama-70b"
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b",
+            "qwen/qwen3.6-27b",
+            "allam-2-7b"
         ]
         groq_model_options = groq_dynamic_models if groq_dynamic_models else fallback_models
         
+        # openai/gpt-oss-120b 우선 선택
         default_groq_idx = 0
-        if st.session_state.groq_model in groq_model_options:
+        if "openai/gpt-oss-120b" in groq_model_options:
+            default_groq_idx = groq_model_options.index("openai/gpt-oss-120b")
+        elif st.session_state.groq_model in groq_model_options:
             default_groq_idx = groq_model_options.index(st.session_state.groq_model)
             
         selected_groq_model = st.selectbox("Groq 모델 선택 (내 계정 활성 모델):", groq_model_options, index=default_groq_idx)
