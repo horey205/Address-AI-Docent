@@ -436,7 +436,7 @@ if 'model_type' not in st.session_state:
 if 'groq_key' not in st.session_state:
     st.session_state.groq_key = os.environ.get("GROQ_API_KEY", "")
 if 'groq_model' not in st.session_state:
-    st.session_state.groq_model = "llama-3.1-8b-instant"
+    st.session_state.groq_model = "gemma2-9b-it"
 if 'or_key' not in st.session_state:
     st.session_state.or_key = os.environ.get("OPENROUTER_API_KEY", "")
 if 'or_model' not in st.session_state:
@@ -688,7 +688,7 @@ if data:
                         with st.spinner("AI 도슨트가 새로운 시각으로 해설을 준비하고 있습니다..."):
                             model_type = st.session_state.get("model_type", "Groq")
                             groq_key = st.session_state.get("groq_key", "")
-                            groq_model = st.session_state.get("groq_model", "llama-3.3-70b-versatile")
+                            groq_model = st.session_state.get("groq_model", "gemma2-9b-it")
                             or_key = st.session_state.get("or_key", "")
                             or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
                             api_key = st.session_state.get("api_key", "")
@@ -707,7 +707,7 @@ if data:
                     with st.spinner("도로명주소 AI 도슨트의 특별한 해설을 준비하고 있습니다. 잠시만 기다려 주세요..."):
                         model_type = st.session_state.get("model_type", "Groq")
                         groq_key = st.session_state.get("groq_key", "")
-                        groq_model = st.session_state.get("groq_model", "llama-3.3-70b-versatile")
+                        groq_model = st.session_state.get("groq_model", "gemma2-9b-it")
                         or_key = st.session_state.get("or_key", "")
                         or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
                         api_key = st.session_state.get("api_key", "")
