@@ -439,15 +439,38 @@ with st.sidebar:
             type="password", 
             help="console.groq.com 에서 1분 만에 무료로 발급받을 수 있습니다."
         )
-        groq_model_options = [
-            "llama-3.1-8b-instant",
+        # Groq API 키가 입력되어 있으면 활성 모델 목록을 실시간으로 가져옴
+        groq_dynamic_models = []
+        if input_groq_key:
+            try:
+                res = requests.get(
+                    "https://api.groq.com/openai/v1/models",
+                    headers={"Authorization": f"Bearer {input_groq_key}"},
+                    timeout=3
+                )
+                if res.status_code == 200:
+                    models_data = res.json().get("data", [])
+                    # chat 기능 지원 모델만 추출
+                    groq_dynamic_models = sorted([m["id"] for m in models_data if "whisper" not in m["id"]])
+            except:
+                pass
+        
+        fallback_models = [
+            "llama3-8b-8192",
+            "llama3-70b-8192",
             "gemma2-9b-it",
             "mixtral-8x7b-32768",
             "qwen-2.5-32b",
             "deepseek-r1-distill-llama-70b"
         ]
-        selected_groq_model = st.selectbox("Groq 모델 선택:", groq_model_options, index=0)
-        custom_groq = st.text_input("Groq 모델 직접 입력 (필요 시):", value=selected_groq_model).strip()
+        groq_model_options = groq_dynamic_models if groq_dynamic_models else fallback_models
+        
+        default_groq_idx = 0
+        if st.session_state.groq_model in groq_model_options:
+            default_groq_idx = groq_model_options.index(st.session_state.groq_model)
+            
+        selected_groq_model = st.selectbox("Groq 모델 선택 (내 계정 활성 모델):", groq_model_options, index=default_groq_idx)
+        custom_groq = st.text_input("Groq 모델명 직접 입력 (필요 시):", value=selected_groq_model).strip()
         st.session_state.groq_model = custom_groq if custom_groq else selected_groq_model
         input_or_key = st.session_state.or_key
         input_or_model = st.session_state.or_model
