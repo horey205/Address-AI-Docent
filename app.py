@@ -404,7 +404,7 @@ if 'model_type' not in st.session_state:
 if 'groq_key' not in st.session_state:
     st.session_state.groq_key = os.environ.get("GROQ_API_KEY", "")
 if 'groq_model' not in st.session_state:
-    st.session_state.groq_model = "llama-3.3-70b-versatile"
+    st.session_state.groq_model = "llama-3.1-70b-versatile"
 if 'or_key' not in st.session_state:
     st.session_state.or_key = os.environ.get("OPENROUTER_API_KEY", "")
 if 'or_model' not in st.session_state:
@@ -439,9 +439,17 @@ with st.sidebar:
             type="password", 
             help="console.groq.com 에서 1분 만에 무료로 발급받을 수 있습니다."
         )
-        groq_model_options = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]
+        groq_model_options = [
+            "llama-3.1-70b-versatile",
+            "llama-3.1-8b-instant",
+            "gemma2-9b-it",
+            "mixtral-8x7b-32768",
+            "llama3-70b-8192",
+            "llama3-8b-8192"
+        ]
         selected_groq_model = st.selectbox("Groq 모델 선택:", groq_model_options, index=0)
-        st.session_state.groq_model = selected_groq_model
+        custom_groq = st.text_input("Groq 모델 직접 입력 (필요 시):", value=selected_groq_model).strip()
+        st.session_state.groq_model = custom_groq if custom_groq else selected_groq_model
         input_or_key = st.session_state.or_key
         input_or_model = st.session_state.or_model
         
