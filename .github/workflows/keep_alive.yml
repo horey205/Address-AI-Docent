@@ -1,0 +1,21 @@
+name: Keep Streamlit Alive
+
+on:
+  schedule:
+    # 6시간마다 실행 (UTC 00:00, 06:00, 12:00, 18:00 -> KST 09:00, 15:00, 21:00, 03:00)
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # GitHub Actions 탭에서 수동 실행 가능
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Streamlit App
+        run: |
+          response_code=$(curl -s -o /dev/null -w "%{http_code}" -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "https://juso-ai-docent.streamlit.app/")
+          echo "Streamlit App Response Code: $response_code"
+          if [ "$response_code" -ge 200 ] && [ "$response_code" -lt 400 ]; then
+            echo "Successfully pinged https://juso-ai-docent.streamlit.app/"
+          else
+            echo "Warning: Response code was $response_code"
+          fi
