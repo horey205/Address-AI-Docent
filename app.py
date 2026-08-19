@@ -573,6 +573,7 @@ with st.sidebar:
                 c_road = item["road"]
                 c_lang = item["lang"]
                 if st.button(f"✨ {c_city} {c_road} ({c_lang})", key=f"my_hist_{idx}_{c_city}_{c_road}_{c_lang}"):
+                    st.session_state.search_keyword = c_road
                     st.session_state.search_input = c_road
                     st.session_state.search_city = c_city
                     st.session_state.target_lang_from_hist = c_lang
@@ -603,6 +604,7 @@ with st.sidebar:
                 st.caption(f"서버에 영구 보존된 대표 사례 {len(history)}개입니다.")
                 for city, road, lang in history:
                     if st.button(f"🏷️ {city} {road} ({lang})", key=f"hist_{city}_{road}_{lang}"):
+                        st.session_state.search_keyword = road
                         st.session_state.search_input = road
                         st.session_state.search_city = city
                         st.session_state.target_lang_from_hist = lang
@@ -617,36 +619,58 @@ st.write("우리 동네 길 위에 숨겨진 흥미로운 이야기를 들려드
 
 data = load_data()
 if data:
-    # 1. 검색 섹션을 최상단으로 이동 (UX 개선)
+    # 1. 검색 섹션 (UX 개선)
     st.subheader("🔍 검색하기")
-    search_query = st.text_input(
-        "어떤 길의 이야기가 궁금하신가요?", 
-        value=st.session_state.search_input,
-        placeholder="예: 세종대로, 테헤란로, 사임당로...",
-        help="찾으시는 도로명을 정확하게 입력해 주세요."
-    ).strip()
     
-    # 검색어 수동 입력 시 세션 업데이트
-    if search_query != st.session_state.search_input:
-        st.session_state.search_input = search_query
-        st.session_state.search_city = ""  # 수동 검색어 변경 시 초기화
-        st.session_state.is_from_button = False
+    # 세션 상태에 search_keyword가 없으면 초기화
+    if "search_keyword" not in st.session_state:
+        st.session_state.search_keyword = st.session_state.get("search_input", "")
         
+    def on_search_change():
+        st.session_state.search_input = st.session_state.search_keyword
+        st.session_state.search_city = ""
+
+    col_input, col_clear = st.columns([6, 1])
+    with col_input:
+        st.text_input(
+            "어떤 길의 이야기가 궁금하신가요?", 
+            key="search_keyword",
+            on_change=on_search_change,
+            placeholder="예: 세종대로, 사슴벌레로, 가리내로...",
+            label_visibility="collapsed"
+        )
+    with col_clear:
+        if st.button("🗑️ 지우기", use_container_width=True):
+            st.session_state.search_keyword = ""
+            st.session_state.search_input = ""
+            st.session_state.search_city = ""
+            st.rerun()
+            
+    search_query = st.session_state.get("search_keyword", "").strip()
+    
     if search_query:
-        # 검색 결과 렌더링 (기존 로직 유지)
-        results = [row for row in data if str(row.get('도로명', '')) == search_query]
+        # 1차: 완전 일치 검색
+        exact_matches = [row for row in data if str(row.get('도로명', '')) == search_query]
+        
+        # 2차: 완전 일치가 없으면 부분 일치 검색
+        if exact_matches:
+            results = exact_matches
+        else:
+            results = [row for row in data if search_query in str(row.get('도로명', ''))]
         
         if results:
             if len(results) > 1:
-                options_list = sorted([f"{row['시군구']}" for row in results])
-                default_idx = 0
-                if st.session_state.search_city in options_list:
-                    default_idx = options_list.index(st.session_state.search_city)
+                # 도로명과 시군구를 함께 표시하여 고를 수 있게 제공
+                options_map = {f"{row['도로명']} ({row['시군구']})": row for row in results}
+                options_list = list(options_map.keys())
                 
-                selection = st.selectbox("지역 선택 (이름이 같은 길이 여러 곳 있습니다)", options_list, index=default_idx)
-                if selection != st.session_state.search_city:
-                    st.session_state.search_city = selection
-                final_row = next(item for item in results if item["시군구"] == selection)
+                selected_label = st.selectbox(
+                    f"'{search_query}' 검색 결과 ({len(results)}건) - 원하는 도로를 선택하세요:",
+                    options_list,
+                    key=f"select_{search_query}"
+                )
+                final_row = options_map[selected_label]
+                st.session_state.search_city = final_row["시군구"]
             else:
                 final_row = results[0]
                 st.session_state.search_city = final_row["시군구"]
@@ -784,6 +808,8 @@ if data:
                         st.info("✨ 새로운 해설이 생성 및 도감에 저장되었습니다.")
                         st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
                         st.audio(audio_file)
+        else:
+            st.warning(f"⚠️ '{search_query}'에 해당하는 도로명 정보를 찾을 수 없습니다. 도로명을 다시 확인해 주세요.")
     
     # 2. 기획 시리즈 섹션 (메뉴 선택 시에만 표시)
     if selected_series != "🏠 도슨트 홈 (검색)":
@@ -800,6 +826,7 @@ if data:
                 </div>
                 """, unsafe_allow_html=True)
                 if st.button(road['name'], key=f"rec_{i}", use_container_width=True):
+                    st.session_state.search_keyword = road['name']
                     st.session_state.search_input = road['name']
                     st.session_state.search_city = road['city']
                     st.session_state.is_from_button = True
