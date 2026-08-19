@@ -245,43 +245,54 @@ def save_docent_cache(city, road, lang, script, audio_path):
 
 def generate_docent_story(city, road, reason, target_lang="한국어", model_type="Groq", groq_key="", groq_model="llama-3.3-70b-versatile", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free", api_key=""):
     """초고속 무료 Groq(1위) 또는 다기능 OpenRouter(3위)를 활용하여 최상의 다국어 도슨트 해설을 생성합니다."""
-    lang_name = VOICE_CONFIG.get(target_lang, VOICE_CONFIG["한국어"])["lang_name"]
-    # 언어별 시작 멘트
-    openings = {
-        "Korean": f"{road} 도로명주소 부여의 의미를 알려주는 '도로명주소 AI 도슨트'입니다.",
-        "English": f"Welcome! I am your AI Docent, here to share the story behind {road}.",
-        "Chinese": f"大家好！我是道路名AI导览员，今天为您讲述{road}背后的历史故事。",
-        "Japanese": f"ようこそ！{road}の由来と歴史をご紹介する「道路名AIドーセント」です。"
+    # 언어별 설정 (자연스러운 로컬 도슨트 대본)
+    lang_prompts = {
+        "Korean": f"""당신은 다정하고 품격 있는 '우리 동네 전문 AI 도슨트'입니다.
+위치({city}), 도로명({road}), 공식 유래({reason})를 바탕으로, 듣는 이가 그 길을 직접 걷고 있는 것처럼 따뜻하고 깊이 있는 역사·문화 스토리텔링 해설을 작성해 주세요.
+
+[필수 규칙]
+1. 첫 문장은 반드시 정확히 다음 문장으로 시작하세요:
+"{road} 도로명주소 부여의 의미를 알려주는 '도로명주소 AI 도슨트'입니다."
+2. 어조: 다정하고 조근조근한 이야기꾼 어조 (~인 것이죠, ~전해진답니다, ~떠올려 봅니다 등).
+3. 내용 구성: 
+   - 단순한 정보 전달을 넘어, {city}의 지리적/역사적 맥락과 지명 한자의 의미, 선조들의 삶과 마을의 번영을 바랐던 따뜻한 정서를 풍부하게 엮어주세요.
+4. 분량: 낭독하기 좋은 4~5개 문단 (풍성하고 여운이 남는 해설).
+5. 금지: 어떠한 생각 과정, 번호 매기기, 글자수 체크, 괄호 숫자 표기 없이 오직 실제 낭독할 한국어 본문만 출력하세요.""",
+
+        "English": f"""You are a warm, eloquent local audio tour docent and cultural storyteller.
+Based on the location ({city}), road name ({road}), and origin ({reason}), create an engaging, richly descriptive audio docent script for visitors walking this path.
+
+[Rules]
+1. The first sentence MUST be:
+"Welcome! I am your AI Docent, here to share the story behind {road}."
+2. Write 100% in natural, immersive English. Translate or romanize road and place names naturally so an English speaker can enjoy it.
+3. Weave in the historical rhythm of {city}, the cultural symbolism of the name, and the warmth of the neighborhood community.
+4. Deliver 3 to 4 vivid, poetic paragraphs that feel like a real audio guide.
+5. DO NOT include any Korean text in the body, thinking steps, character counters, or parenthesis numbers (e.g. (78)). Output ONLY the pure spoken script.""",
+
+        "Chinese": f"""您是一位亲切而博学的当地街道AI语音导览员。
+根据地点（{city}）、道路名（{road}）和官方由来（{reason}），为漫步在这一带的游客撰写一篇生动优美、富有历史文化底蕴的语音解说词。
+
+[规则]
+1. 第一句话必须是：
+"大家好！我是道路名AI导览员，今天为您讲述{road}背后的历史故事。"
+2. 全文使用流畅自然的中文。
+3. 结合当地地理历史变迁与汉字地名的美好寓意，娓娓道来。
+4. 篇幅为3~4个生动的小段落。
+5. 严禁输出任何思考过程、字数统计或分析备注，只输出纯解说词。""",
+
+        "Japanese": f"""あなたは親しみやすく教養豊かな「まち歩きAIドーセント（音声ガイド）」です。
+場所（{city}）、道路名（{road}）、公式由来（{reason}）をもとに、この道を歩く旅人に語りかけるような、温かく情緒あふれるストーリーテリング音声ガイド原稿を作成してください。
+
+[ルール]
+1. 最初の文は必ず以下から始めてください：
+"ようこそ！{road}の由来と歴史をご紹介する「道路名AIドーセント」です。"
+2. 全文を自然で美しい日本語で作成してください。
+3. 地名の由来や歴史の息吹、街の温もりを感じられる3〜4段落の豊かな構成にしてください。
+4. 思考プロセスや文字数カウントなどの余計なメモは一切省き、純粋な朗読原稿のみを出力してください。"""
     }
-    intro_phrase = openings.get(lang_name, openings["Korean"])
 
-    # 공통 고품질 프롬프트
-    prompt = f"""
-    당신은 친절한 '우리 동네 주소 전문 도슨트'이자 역사·지리 스토리텔링 전문가입니다.
-    제공된 [공식 유래] 데이터를 바탕으로, 해당 도로명이 지닌 가치와 의미를 사용자에게 쉽고 흥미롭게 들려주세요.
-
-    [작성 규칙 - 절대 엄수]
-    1. **오직 최종 낭독 대본만 출력하세요.** 
-       - 어떠한 분석, 생각 과정, 글자 수 계산(Character Count Check), 해설 주석도 절대 적지 마세요.
-       - 첫 단어부터 마지막 단어까지 순수한 도슨트 오디오 대본만 작성해야 합니다.
-    2. **유래 기반의 사실적 스토리텔링**:
-       - 공식 유래({reason})가 명확한 역사적 사실에 기반한 경우 억지 가설을 꾸며내지 마세요.
-       - 공식 유래가 단순할 때만 지역({city})의 특성이나 지명 한자 의미를 부드럽게 엮어 설명하세요.
-    3. **출력 언어 및 첫마디**:
-       - 반드시 모든 내용을 '{lang_name}'로 작성하세요.
-       - 첫마디는 반드시 "{intro_phrase}"로 시작하세요.
-    4. **말투 및 분량**:
-       - 조근조근하고 따뜻한 이야기꾼(Storyteller) 어조로 300~400자 내외로 작성하세요.
-    5. **금지 사항**:
-       - "부여사유", "호 인용", "공식", "데이터"라는 단어 금지
-       - 글자 수 확인, 분석 메모, 번호 매기기, 소제목 절대 금지
-
-    [데이터]
-    - 위치: {city}
-    - 길 이름: {road}
-    - 공식 유래: {reason}
-    - 출력 언어: {lang_name}
-    """
+    selected_prompt = lang_prompts.get(lang_name, lang_prompts["Korean"])
 
     # 1. Groq 호출 (1순위 초고속 무료 모델)
     if model_type == "Groq":
@@ -295,10 +306,10 @@ def generate_docent_story(city, road, reason, target_lang="한국어", model_typ
             payload = {
                 "model": groq_model,
                 "messages": [
-                    {"role": "system", "content": "You are a professional local audio tour docent. Output only the warm storytelling script for visitors in the requested language."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": "You are a world-class audio docent. Output only the pure final spoken narration script without any commentary, metadata, or character counts."},
+                    {"role": "user", "content": selected_prompt}
                 ],
-                "temperature": 0.7,
+                "temperature": 0.75,
                 "max_tokens": 1500
             }
             resp = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=30)
@@ -309,23 +320,14 @@ def generate_docent_story(city, road, reason, target_lang="한국어", model_typ
                 # 1) <think>...</think> 태그 제거
                 cleaned = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL).strip()
                 
-                # 2) 핵심: 모델이 생각 과정 끝에 intro_phrase로 대본을 시작하므로, intro_phrase 이후 내용 추출
-                if intro_phrase in cleaned:
-                    # intro_phrase가 나타나는 마지막 위치(또는 첫 위치)부터 본문으로 간주
-                    parts = cleaned.split(intro_phrase)
-                    # intro_phrase 뒤에 실제 대본이 위치함
-                    script_body = intro_phrase + parts[-1]
-                    
-                    # 3) 대본 뒤에 붙은 "Count:", "Character Count", "Let's count" 등 분석 제거
-                    stop_keywords = [
-                        "Count:", "Character Count", "Character count", "Count Check", 
-                        "Let's count", "Let’s count", "Draft Construction", "Deconstruct"
-                    ]
-                    for kw in stop_keywords:
-                        if kw in script_body:
-                            script_body = script_body.split(kw)[0].strip()
-                    
-                    cleaned = script_body
+                # 2) 괄호 안의 글자수 카운트 (숫자) 표기 (예: (78), (108) 등) 제거
+                cleaned = re.sub(r'\s*\(\d{1,4}\)', '', cleaned)
+                
+                # 3) 앞부분 생각과정이나 뒷부분 카운트 찌꺼기 정돈
+                stop_keywords = ["Count:", "Character Count", "Character count", "Let's count", "Let’s count", "Here's a thinking process"]
+                for kw in stop_keywords:
+                    if kw in cleaned:
+                        cleaned = cleaned.split(kw)[0].strip()
                 
                 return cleaned.strip()
             else:
