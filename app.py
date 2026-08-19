@@ -582,8 +582,7 @@ with st.sidebar:
                 c_road = item["road"]
                 c_lang = item["lang"]
                 if st.button(f"✨ {c_city} {c_road} ({c_lang})", key=f"my_hist_{idx}_{c_city}_{c_road}_{c_lang}"):
-                    st.session_state.search_keyword = c_road
-                    st.session_state.search_input = c_road
+                    st.session_state.pending_search = c_road
                     st.session_state.search_city = c_city
                     st.session_state.target_lang_from_hist = c_lang
                     st.session_state.is_from_button = True
@@ -613,8 +612,7 @@ with st.sidebar:
                 st.caption(f"서버에 영구 보존된 대표 사례 {len(history)}개입니다.")
                 for city, road, lang in history:
                     if st.button(f"🏷️ {city} {road} ({lang})", key=f"hist_{city}_{road}_{lang}"):
-                        st.session_state.search_keyword = road
-                        st.session_state.search_input = road
+                        st.session_state.pending_search = road
                         st.session_state.search_city = city
                         st.session_state.target_lang_from_hist = lang
                         st.session_state.is_from_button = True
@@ -631,8 +629,12 @@ if data:
     # 1. 검색 섹션 (UX 개선)
     st.subheader("🔍 검색하기")
     
-    # 세션 상태에 search_keyword가 없으면 초기화
-    if "search_keyword" not in st.session_state:
+    # 버튼 클릭 등으로 예약된 검색어가 있다면 텍스트 입력창 렌더링 전에 동기화
+    if "pending_search" in st.session_state and st.session_state.pending_search:
+        st.session_state.search_keyword = st.session_state.pending_search
+        st.session_state.search_input = st.session_state.pending_search
+        st.session_state.pending_search = None
+    elif "search_keyword" not in st.session_state:
         st.session_state.search_keyword = st.session_state.get("search_input", "")
         
     def on_search_change():
@@ -828,8 +830,7 @@ if data:
                 </div>
                 """, unsafe_allow_html=True)
                 if st.button(road['name'], key=f"rec_{i}", use_container_width=True):
-                    st.session_state.search_keyword = road['name']
-                    st.session_state.search_input = road['name']
+                    st.session_state.pending_search = road['name']
                     st.session_state.search_city = road['city']
                     st.session_state.is_from_button = True
                     st.rerun()
