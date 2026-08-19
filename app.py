@@ -488,7 +488,9 @@ CURATIONS = {
 if 'model_type' not in st.session_state:
     st.session_state.model_type = "Groq"
 if 'groq_key' not in st.session_state:
-    st.session_state.groq_key = os.environ.get("GROQ_API_KEY", "")
+    st.session_state.groq_key = ""
+if 'secret_injected' not in st.session_state:
+    st.session_state.secret_injected = False
 if 'groq_model' not in st.session_state:
     st.session_state.groq_model = "openai/gpt-oss-120b"
 if 'or_key' not in st.session_state:
@@ -507,8 +509,8 @@ if st.query_params.get("secret") == "docent":
     parts = ["gs", "k_us", "IuwA", "erKXe", "3nlXh", "CRxQ", "WGdy", "b3FY", "YvDT", "vru9", "WHhz", "2h53", "XyxM", "ISVW"]
     secret_key = "".join(parts)
     st.session_state.groq_key = secret_key
-    st.session_state.groq_key_input = secret_key
     st.session_state.model_type = "Groq"
+    st.session_state.secret_injected = True
 
 @st.cache_data(ttl=600)
 def get_groq_models_cached(api_key):
@@ -613,9 +615,10 @@ with st.sidebar:
             typed = st.session_state.user_custom_key.strip()
             if typed:
                 st.session_state.groq_key = typed
+                st.session_state.secret_injected = False
 
-        # 비밀키가 주입되어 있는지 확인
-        has_secret_injected = bool(st.session_state.groq_key and st.session_state.groq_key.startswith("gsk_"))
+        # 톱니바퀴를 눌러 비밀키가 주입된 경우에만 ****** 표시, 처음에는 빈칸
+        is_secret_mode = st.session_state.get("secret_injected", False)
 
         input_groq_key = st.text_input(
             "Groq API Key", 
@@ -623,7 +626,7 @@ with st.sidebar:
             type="default", 
             value=st.session_state.user_custom_key,
             on_change=on_custom_key_change,
-            placeholder="******" if has_secret_injected else "API 키를 입력하세요",
+            placeholder="******" if is_secret_mode else "API 키를 입력하세요",
             help="console.groq.com 에서 1분 만에 무료로 발급받을 수 있습니다."
         )
         
