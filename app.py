@@ -11,16 +11,6 @@ from google.genai import types
 import uuid
 import requests
 import time
-# 로컬 Ollama 접속 가능 여부 체크
-def check_ollama_available():
-    try:
-        response = requests.get("http://localhost:11434/", timeout=1)
-        return True
-    except:
-        return False
-
-OLLAMA_AVAILABLE = check_ollama_available()
-
 # 페이지 설정
 st.set_page_config(page_title="주소 AI 도슨트", page_icon="🎙️", layout="centered")
 
@@ -245,25 +235,6 @@ def get_cached_docent(city, road, lang="한국어"):
     except Exception as e:
         return None
 
-def get_ollama_models():
-    """로컬 Ollama의 모델 목록을 가져옵니다."""
-    default_models = ["gemma4", "gemma4:e2b-it-qat"]
-    if not OLLAMA_AVAILABLE:
-        return default_models
-    try:
-        response = requests.get("http://localhost:11434/api/tags", timeout=2)
-        if response.status_code == 200:
-            models = response.json().get("models", [])
-            fetched_models = [m["name"] for m in models]
-            # 기본 탑재 모델이 결과에 없다면 상단에 병합
-            for dm in default_models:
-                if dm not in fetched_models:
-                    fetched_models.append(dm)
-            return fetched_models
-    except:
-        pass
-    return default_models # 연결 실패 시 기본값
-
 init_db()
 
 def save_docent_cache(city, road, lang, script, audio_path):
@@ -274,37 +245,22 @@ def save_docent_cache(city, road, lang, script, audio_path):
     conn.commit()
     conn.close()
 
-def generate_docent_story(city, road, reason, api_key, target_lang="한국어", model_type="Gemini", ollama_model="gemma4:e2b-it-qat", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free", brave_key=""):
-    """최신 Google GenAI SDK(Gemini) 또는 Ollama(로컬) 또는 OpenRouter를 사용하며, Brave Search RAG를 적용합니다."""
+def generate_docent_story(city, road, reason, target_lang="한국어", model_type="Groq", groq_key="", groq_model="llama-3.3-70b-versatile", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free", api_key=""):
+    """초고속 무료 Groq(1위) 또는 다기능 OpenRouter(3위)를 활용하여 최상의 다국어 도슨트 해설을 생성합니다."""
     lang_name = VOICE_CONFIG.get(target_lang, VOICE_CONFIG["한국어"])["lang_name"]
     
-    # Brave Search 실행 (로컬 Ollama 모델의 지식 보완을 위해서만 수행)
-    search_context = ""
-    if brave_key and model_type == "Ollama":
-        search_query = f"{city} {road} 역사 유래"
-        search_context = search_brave(search_query, brave_key)
-        
-    search_info_block = ""
-    if search_context:
-        search_info_block = f"""
-    [실시간 검색 참고 정보 (인터넷 검색 결과)]
-    {search_context}
-    
-    * 중요: 위 실시간 검색 정보를 최우선 팩트로 활용하여 공식 유래의 역사적 맥락과 디테일을 더욱 풍부하게 보완하되, 검색 결과와 전혀 무관한 낭설은 제외하세요.
-    """
-    
-    # 공통 프롬프트
+    # 공통 고품질 프롬프트
     prompt = f"""
     당신은 친절한 '우리 동네 주소 전문 도슨트'이자 역사·지리 스토리텔링 전문가입니다.
-    제공된 [공식 유래] 데이터와 [실시간 검색 참고 정보]를 바탕으로, 해당 도로명이 지닌 가치와 의미를 사용자에게 쉽고 흥미롭게 들려주세요.
-    {search_info_block}
+    제공된 [공식 유래] 데이터를 바탕으로, 해당 도로명이 지닌 가치와 의미를 사용자에게 쉽고 흥미롭게 들려주세요.
+
     [작성 규칙]
     1. **유래 기반의 사실적 스토리텔링**:
        - 공식 유래({reason})가 구체적인 역사적 사건, 인물, 혹은 국제 교류(예: 테헤란로) 등 명확한 사실에 기반한 경우, 억지 전설이나 성씨 집성촌 같은 무관한 가설을 절대 꾸며내어 덧붙이지 마세요. 오직 해당 사실과 그 역사적/문화적 의의에 집중하세요.
        - 만약 공식 유래가 "옛 지명에서 유래"와 같이 매우 단순하고 모호할 때만, 해당 지역({city})의 행정구역 변천사나 지리학적 특성, 혹은 지명 한자의 자연스러운 의미를 엮어 친근하게 설명하세요.
-    2. **자연스러운 맥락 유지**: 없는 사실을 지어내어(예: 존재하지 않는 금광 설화나 집성촌 등) 강제로 끼워 맞추지 말고, 흐름이 매끄럽고 사실에 부합하도록 구성하세요.
+    2. **자연스러운 맥락 유지**: 없는 사실을 지어내어 강제로 끼워 맞추지 말고, 흐름이 매끄럽고 사실에 부합하도록 구성하세요.
     3. **출력 언어 및 첫마디**:
-       - 반드시 모든 내용을 '{lang_name}'로 작성해 주세요.
+       - 반드시 모든 내용을 '{lang_name}'로 자연스럽게 작성해 주세요.
        - 첫마디는 반드시 다음과 같이 시작하세요: "{road} 도로명주소 부여의 의미를 알려주는 '도로명주소 AI 도슨트'입니다." (반갑습니다 같은 인사는 생략)
     4. **말투 및 분량**:
        - 다정하고 조근조근한 이야기꾼(Storyteller)의 어조를 사용하세요 (~인 것이죠, ~전해진답니다 등).
@@ -318,27 +274,36 @@ def generate_docent_story(city, road, reason, api_key, target_lang="한국어", 
     - 출력 언어: {lang_name}
     """
 
-    if model_type == "Ollama":
-        if not OLLAMA_AVAILABLE:
-            return "⚠️ 현재 접속하신 환경은 클라우드 서버이므로 로컬 Ollama 모델을 호출할 수 없습니다. 좌측 설정에서 Gemini 모델을 선택해주세요."
+    # 1. Groq 호출 (1순위 초고속 무료 모델)
+    if model_type == "Groq":
+        if not groq_key:
+            return "⚠️ Groq API 키가 설정되지 않았습니다. 좌측 사이드바 설정에 등록해 주세요. (무료 발급: console.groq.com)"
         try:
-            # 로컬 Ollama 호출
-            url = "http://localhost:11434/api/generate"
-            response = requests.post(url, json={
-                "model": ollama_model,
-                "prompt": prompt,
-                "stream": False
-            }, timeout=60)
-            if response.status_code == 200:
-                return response.json().get('response', '').strip()
+            headers = {
+                "Authorization": f"Bearer {groq_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": groq_model,
+                "messages": [
+                    {"role": "system", "content": "You are a professional local tour docent and historical storyteller. Write vivid and engaging stories in the requested language."},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 1000
+            }
+            resp = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=30)
+            if resp.status_code == 200:
+                return resp.json()['choices'][0]['message']['content'].strip()
             else:
-                return f"Ollama 응답 오류: {response.text}"
+                return f"Groq API 오류 ({resp.status_code}): {resp.text}"
         except Exception as e:
-            return f"Ollama 연결 실패: {str(e)}"
-            
+            return f"Groq 연결 실패: {str(e)}"
+
+    # 2. OpenRouter 호출 (3순위 다양한 무료 모델 라우팅)
     elif model_type == "OpenRouter":
         if not or_key:
-            return "⚠️ OpenRouter API 키가 설정되지 않았습니다. 설정에서 등록해 주세요."
+            return "⚠️ OpenRouter API 키가 설정되지 않았습니다. 좌측 사이드바 설정에 등록해 주세요. (openrouter.ai)"
         try:
             headers = {
                 "Authorization": f"Bearer {or_key}",
@@ -358,16 +323,14 @@ def generate_docent_story(city, road, reason, api_key, target_lang="한국어", 
         except Exception as e:
             return f"OpenRouter 연결 실패: {str(e)}"
     
-    # 기본 Gemini 호출
+    # 3. Gemini 예비 옵션 (키가 있을 때만 호출)
     if not api_key:
         return f"안녕하세요! {city} {road}입니다. 이곳은 {reason}라는 의미가 담긴 길이에요. (API 키가 설정되지 않아 기본 메시지가 출력됩니다.)"
     
     try:
         client = genai.Client(api_key=api_key)
-        # 사용자가 선호하는 Gemini 3 Flash Preview 모델로 복구합니다.
-        # 인코딩 에러 방지를 위해 Content 객체를 명시적으로 생성하여 전달합니다.
         response = client.models.generate_content(
-            model='gemini-3-flash-preview',
+            model='gemini-2.5-flash',
             contents=[
                 types.Content(
                     role="user",
@@ -377,10 +340,7 @@ def generate_docent_story(city, road, reason, api_key, target_lang="한국어", 
         )
         return response.text.strip()
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(error_details)  # 터미널에 상세 오류 출력
-        return f"해설 생성 중 오류가 발생했습니다. (모델명이나 API 키를 확인해주세요.)\n상세: {str(e)}"
+        return f"해설 생성 중 오류가 발생했습니다.\n상세: {str(e)}"
 
 # 기획 시리즈 목록 (도슨트 큐레이션)
 CURATIONS = {
@@ -457,18 +417,19 @@ CURATIONS = {
 }
 
 # 사이드바 설정
+# 사이드바 설정
 if 'model_type' not in st.session_state:
-    st.session_state.model_type = "Ollama"
-if 'ollama_model' not in st.session_state:
-    st.session_state.ollama_model = "gemma4"
-if 'api_key' not in st.session_state:
-    st.session_state.api_key = os.environ.get("GEMINI_API_KEY", "")
+    st.session_state.model_type = "Groq"
+if 'groq_key' not in st.session_state:
+    st.session_state.groq_key = os.environ.get("GROQ_API_KEY", "")
+if 'groq_model' not in st.session_state:
+    st.session_state.groq_model = "llama-3.3-70b-versatile"
 if 'or_key' not in st.session_state:
     st.session_state.or_key = os.environ.get("OPENROUTER_API_KEY", "")
 if 'or_model' not in st.session_state:
     st.session_state.or_model = "nvidia/nemotron-3-super-120b-a12b:free"
-if 'brave_key' not in st.session_state:
-    st.session_state.brave_key = os.environ.get("BRAVE_API_KEY", "BSAbVKCiRxhMr2OMRFjZvlpFJNCptdU")
+if 'api_key' not in st.session_state:
+    st.session_state.api_key = os.environ.get("GEMINI_API_KEY", "")
 if 'search_input' not in st.session_state:
     st.session_state.search_input = ""
 if 'search_city' not in st.session_state:
@@ -482,45 +443,53 @@ with st.sidebar:
     
     st.divider()
     
-    st.header("⚙️ 설정")
+    st.header("⚙️ AI 모델 설정")
     
-    # 모델 선택 메뉴는 환경에 상관없이 항상 표시
-    model_choice = st.radio("사용할 AI 모델 선택:", ["Gemini (온라인)", "OpenRouter (온라인)", "Ollama (로컬)"], index=2, help="Ollama는 사용자의 PC(로컬) 환경에서만 작동합니다.")
+    # 추천 모델 순위 기반 라디오 버튼
+    model_choice = st.radio(
+        "사용할 AI 엔진 선택:", 
+        ["⚡ Groq (1순위: 초고속 무료 Llama 3.3)", "🌐 OpenRouter (3순위: 다양한 무료 모델)", "✨ Gemini (예비용)"],
+        index=0
+    )
     
-    if "Ollama" in model_choice:
-        st.session_state.model_type = "Ollama"
-        if OLLAMA_AVAILABLE:
-            st.info("💻 로컬 환경 감지됨: PC에 설치된 Ollama 모델을 사용할 수 있습니다.")
-            # Ollama 모델 목록 동적 로딩
-            available_models = get_ollama_models()
-            selected_ollama_model = st.selectbox("Ollama 모델 선택:", available_models)
-            
-            # 사용자가 직접 모델명을 입력할 수 있도록 텍스트 입력창 추가
-            custom_ollama_model = st.text_input(
-                "Ollama 모델명 직접 입력 (목록에 없을 때 사용):", 
-                value=selected_ollama_model,
-                help="로컬 Ollama에 등록된 모델명(예: gemma4)을 정확하게 적어주세요."
-            ).strip()
-            
-            st.session_state.ollama_model = custom_ollama_model if custom_ollama_model else selected_ollama_model
-        else:
-            st.warning("⚠️ 주의: Ollama는 로컬(개발자 PC) 환경에서만 작동합니다. 현재 접속하신 클라우드 서버에서는 호출할 수 없습니다.")
-            st.session_state.ollama_model = "gemma4" # 기본값 유지
+    if "Groq" in model_choice:
+        st.session_state.model_type = "Groq"
+        input_groq_key = st.text_input(
+            "Groq API Key", 
+            value=st.session_state.groq_key, 
+            type="password", 
+            help="console.groq.com 에서 1분 만에 무료로 발급받을 수 있습니다."
+        )
+        groq_model_options = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]
+        selected_groq_model = st.selectbox("Groq 모델 선택:", groq_model_options, index=0)
+        st.session_state.groq_model = selected_groq_model
+        input_or_key = st.session_state.or_key
+        input_or_model = st.session_state.or_model
+        input_gemini_key = st.session_state.api_key
+        
     elif "OpenRouter" in model_choice:
         st.session_state.model_type = "OpenRouter"
-        st.session_state.ollama_model = "gemma4"
+        input_groq_key = st.session_state.groq_key
+        input_or_key = st.text_input(
+            "OpenRouter API Key", 
+            value=st.session_state.or_key, 
+            type="password", 
+            help="openrouter.ai 에서 발급받은 키를 입력하세요."
+        )
+        input_or_model = st.text_input("OpenRouter Model ID", value=st.session_state.or_model, help="기본: nvidia/nemotron-3-super-120b-a12b:free")
+        input_gemini_key = st.session_state.api_key
     else:
         st.session_state.model_type = "Gemini"
-        st.session_state.ollama_model = "gemma4"
-
-    input_key = st.text_input("Gemini API Key", value=st.session_state.api_key, type="password", help="Gemini 사용 시에 필요합니다.")
-    input_or_key = st.text_input("OpenRouter API Key", value=st.session_state.or_key, type="password", help="OpenRouter 사용 시에 필요합니다.")
-    input_or_model = st.text_input("OpenRouter Model ID", value=st.session_state.or_model, help="기본: nvidia/nemotron-3-super-120b-a12b:free")
+        input_groq_key = st.session_state.groq_key
+        input_or_key = st.session_state.or_key
+        input_or_model = st.session_state.or_model
+        input_gemini_key = st.text_input("Gemini API Key", value=st.session_state.api_key, type="password", help="aistudio.google.com 무료 키")
     
     if st.button("설정 저장 (적용)", type="primary"):
-        st.session_state.api_key = input_key
+        st.session_state.groq_key = input_groq_key
         st.session_state.or_key = input_or_key
         st.session_state.or_model = input_or_model
+        st.session_state.api_key = input_gemini_key
         st.success("설정이 적용되었습니다!")
         st.rerun()
 
@@ -654,12 +623,20 @@ if data:
                     st.warning("⚠️ 이전에 API 키 없이 생성된 기본 해설입니다. 아래 버튼을 눌러 정식 AI 해설로 업데이트하세요.")
                     st.markdown(f'<div class="docent-script-box" style="opacity: 0.7;">{docent_script}</div>', unsafe_allow_html=True)
                     if st.button("🎤 AI 해설 정식 생성하기", type="primary", use_container_width=True, key="fallback_gen_btn"):
-                        with st.spinner("Gemini AI가 이 지명의 숨겨진 유래를 탐색하고 있습니다..."):
-                            model_type = st.session_state.get("model_type", "Gemini")
-                            ollama_model = st.session_state.get("ollama_model", "gemma4:e2b-it-qat")
+                        with st.spinner("AI 도슨트가 이 지명의 숨겨진 유래를 탐색하고 있습니다..."):
+                            model_type = st.session_state.get("model_type", "Groq")
+                            groq_key = st.session_state.get("groq_key", "")
+                            groq_model = st.session_state.get("groq_model", "llama-3.3-70b-versatile")
                             or_key = st.session_state.get("or_key", "")
                             or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
-                            docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model, or_key, or_model, st.session_state.brave_key)
+                            api_key = st.session_state.get("api_key", "")
+                            
+                            docent_script = generate_docent_story(
+                                final_row['시군구'], final_row['도로명'], final_row['부여사유'],
+                                target_lang=selected_lang, model_type=model_type,
+                                groq_key=groq_key, groq_model=groq_model,
+                                or_key=or_key, or_model=or_model, api_key=api_key
+                            )
                             audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                             save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                             st.rerun()
@@ -677,22 +654,38 @@ if data:
                     # 수동 재생성 버튼 추가
                     if st.button("🔄 AI 해설 다시 만들기", key="re_gen_btn"):
                         with st.spinner("AI 도슨트가 새로운 시각으로 해설을 준비하고 있습니다..."):
-                            model_type = st.session_state.get("model_type", "Gemini")
-                            ollama_model = st.session_state.get("ollama_model", "gemma4:e2b-it-qat")
+                            model_type = st.session_state.get("model_type", "Groq")
+                            groq_key = st.session_state.get("groq_key", "")
+                            groq_model = st.session_state.get("groq_model", "llama-3.3-70b-versatile")
                             or_key = st.session_state.get("or_key", "")
                             or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
-                            docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model, or_key, or_model, st.session_state.brave_key)
+                            api_key = st.session_state.get("api_key", "")
+                            
+                            docent_script = generate_docent_story(
+                                final_row['시군구'], final_row['도로명'], final_row['부여사유'],
+                                target_lang=selected_lang, model_type=model_type,
+                                groq_key=groq_key, groq_model=groq_model,
+                                or_key=or_key, or_model=or_model, api_key=api_key
+                            )
                             audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                             save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                             st.rerun()
             else:
                 if st.button("🎤 AI 도슨트 해설 듣기", type="primary", use_container_width=True):
                     with st.spinner("도로명주소 AI 도슨트의 특별한 해설을 준비하고 있습니다. 잠시만 기다려 주세요..."):
-                        model_type = st.session_state.get("model_type", "Gemini")
-                        ollama_model = st.session_state.get("ollama_model", "gemma4:e2b-it-qat")
+                        model_type = st.session_state.get("model_type", "Groq")
+                        groq_key = st.session_state.get("groq_key", "")
+                        groq_model = st.session_state.get("groq_model", "llama-3.3-70b-versatile")
                         or_key = st.session_state.get("or_key", "")
                         or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
-                        docent_script = generate_docent_story(final_row['시군구'], final_row['도로명'], final_row['부여사유'], st.session_state.api_key, selected_lang, model_type, ollama_model, or_key, or_model, st.session_state.brave_key)
+                        api_key = st.session_state.get("api_key", "")
+                        
+                        docent_script = generate_docent_story(
+                            final_row['시군구'], final_row['도로명'], final_row['부여사유'],
+                            target_lang=selected_lang, model_type=model_type,
+                            groq_key=groq_key, groq_model=groq_model,
+                            or_key=or_key, or_model=or_model, api_key=api_key
+                        )
                         audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
                         save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                         st.info("✨ 새로운 해설이 생성 및 도감에 저장되었습니다.")
