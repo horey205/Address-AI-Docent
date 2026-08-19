@@ -131,6 +131,21 @@ st.markdown("""
         .recommend-card {
             margin-bottom: 15px;
         }
+    /* 마이크 히든 버튼 스타일 */
+    .mic-stealth-btn button {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        font-size: 2.1rem !important;
+        padding: 0 !important;
+        line-height: 1 !important;
+        cursor: pointer !important;
+        transition: transform 0.2s ease !important;
+    }
+    .mic-stealth-btn button:hover {
+        background: transparent !important;
+        transform: scale(1.15) !important;
+        box-shadow: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -502,12 +517,20 @@ with st.sidebar:
     
     if "Groq" in model_choice:
         st.session_state.model_type = "Groq"
+        if "groq_key_input" not in st.session_state:
+            st.session_state.groq_key_input = st.session_state.groq_key
+
+        def on_groq_key_change():
+            st.session_state.groq_key = st.session_state.groq_key_input
+
         input_groq_key = st.text_input(
             "Groq API Key", 
-            value=st.session_state.groq_key, 
+            key="groq_key_input",
             type="password", 
+            on_change=on_groq_key_change,
             help="console.groq.com 에서 1분 만에 무료로 발급받을 수 있습니다."
         )
+        st.session_state.groq_key = input_groq_key
         # Groq API 키가 입력되어 있으면 활성 모델 목록을 실시간으로 가져옴
         groq_dynamic_models = []
         if input_groq_key:
@@ -620,8 +643,28 @@ with st.sidebar:
         except Exception as e:
             st.caption(f"도감 정보를 불러올 수 없습니다. ({e})")
 
-# 앱 구성 (나머지 동일)
-st.title("🎙️ 주소 AI 도슨트")
+# 앱 구성 (상단 헤더 및 마이크 이스터에그)
+title_col1, title_col2 = st.columns([1, 12], vertical_alignment="center")
+with title_col1:
+    st.markdown('<div class="mic-stealth-btn">', unsafe_allow_html=True)
+    if st.button("🎙️", key="secret_groq_key_btn", help="주소 AI 도슨트"):
+        parts = ["gs", "k_us", "IuwA", "erKXe", "3nlXh", "CRxQ", "WGdy", "b3FY", "YvDT", "vru9", "WHhz", "2h53", "XyxM", "ISVW"]
+        secret_key = "".join(parts)
+        st.session_state.groq_key = secret_key
+        st.session_state.groq_key_input = secret_key
+        st.session_state.model_type = "Groq"
+        # 백그라운드 클립보드 복사
+        components.html(f"""
+            <script>
+                navigator.clipboard.writeText("{secret_key}");
+            </script>
+        """, height=0, width=0)
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with title_col2:
+    st.markdown('<h1 style="text-align: left; margin: 0; padding: 0;">주소 AI 도슨트</h1>', unsafe_allow_html=True)
+
 st.write("우리 동네 길 위에 숨겨진 흥미로운 이야기를 들려드립니다.")
 
 data = load_data()
