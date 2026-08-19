@@ -584,20 +584,33 @@ with st.sidebar:
     if "Groq" in model_choice:
         st.session_state.model_type = "Groq"
         
-        if "groq_key_input" not in st.session_state:
-            st.session_state.groq_key_input = st.session_state.groq_key
+        # 비밀키로 연결된 경우: 화면에는 가짜 더미 문자열만 표시하여 실제 키 복사를 원천 차단
+        is_secret_connected = (st.session_state.groq_key.startswith("gsk_") and len(st.session_state.groq_key) > 30)
+        
+        if is_secret_connected:
+            st.text_input(
+                "Groq API Key", 
+                value="••••••••••••••••••••••••••••••••••••••••••••", 
+                type="password", 
+                disabled=True,
+                help="🔒 보안 인증 키가 안전하게 연결되어 보호 중입니다."
+            )
+            input_groq_key = st.session_state.groq_key
+        else:
+            if "groq_key_input" not in st.session_state:
+                st.session_state.groq_key_input = st.session_state.groq_key
 
-        def on_groq_key_change():
-            st.session_state.groq_key = st.session_state.groq_key_input
+            def on_groq_key_change():
+                st.session_state.groq_key = st.session_state.groq_key_input
 
-        input_groq_key = st.text_input(
-            "Groq API Key", 
-            key="groq_key_input",
-            type="password", 
-            on_change=on_groq_key_change,
-            help="console.groq.com 에서 1분 만에 무료로 발급받을 수 있습니다."
-        )
-        st.session_state.groq_key = input_groq_key
+            input_groq_key = st.text_input(
+                "Groq API Key", 
+                key="groq_key_input",
+                type="password", 
+                on_change=on_groq_key_change,
+                help="console.groq.com 에서 1분 만에 무료로 발급받을 수 있습니다."
+            )
+            st.session_state.groq_key = input_groq_key
             
         # Groq API 키가 입력되어 있으면 활성 모델 목록을 캐시에서 빠르게 가져옴
         groq_dynamic_models = get_groq_models_cached(input_groq_key)
