@@ -322,15 +322,9 @@ Based on the location ({city}), road name ({road}), and origin ({reason}), creat
                 cleaned = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL).strip()
                 
                 # 2) 괄호 안의 글자수 카운트 (숫자) 표기 (예: (78), (108) 등) 제거
-                cleaned = re.sub(r'\s*\(\d{1,4}\)', '', cleaned)
+                cleaned = re.sub(r'\s*\(\d{1,4}\)', '', cleaned).strip()
                 
-                # 3) 앞부분 생각과정이나 뒷부분 카운트 찌꺼기 정돈
-                stop_keywords = ["Count:", "Character Count", "Character count", "Let's count", "Let’s count", "Here's a thinking process"]
-                for kw in stop_keywords:
-                    if kw in cleaned:
-                        cleaned = cleaned.split(kw)[0].strip()
-                
-                return cleaned.strip()
+                return cleaned if cleaned else raw_text
             else:
                 return f"Groq API 오류 ({resp.status_code}): {resp.text}"
         except Exception as e:
