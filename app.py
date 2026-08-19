@@ -33,8 +33,8 @@ st.markdown("""
         box-shadow: 0 2px 5px rgba(0,0,0,0.02);
     }
     
-    /* 사이드바 API 키 입력창: 브라우저 비밀번호 팝업을 차단하면서 글자는 점자(***)로 마스킹 */
-    div[data-testid="stSidebar"] .stTextInput input {
+    /* 사이드바 API 키 입력창: 값이 입력되었을 때만 점자(***)로 마스킹하고 placeholder는 정상 표시 */
+    div[data-testid="stSidebar"] .stTextInput input:not(:placeholder-shown) {
         -webkit-text-security: disc !important;
         text-security: disc !important;
     }
