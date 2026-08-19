@@ -492,8 +492,26 @@ if st.query_params.get("secret") == "docent":
     st.session_state.groq_key = secret_key
     st.session_state.groq_key_input = secret_key
     st.session_state.model_type = "Groq"
-    st.query_params.clear()
-    st.rerun()
+
+@st.cache_data(ttl=600)
+def get_groq_models_cached(api_key):
+    if not api_key:
+        return []
+    try:
+        res = requests.get(
+            "https://api.groq.com/openai/v1/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=2
+        )
+        if res.status_code == 200:
+            models_data = res.json().get("data", [])
+            return sorted([
+                m["id"] for m in models_data 
+                if "whisper" not in m["id"] and "guard" not in m["id"]
+            ])
+    except:
+        pass
+    return []
 
 # 전역 키보드 단축키(Ctrl + Alt + K) 및 사이드바 숨은 트리거 리스너
 components.html("""
@@ -568,24 +586,8 @@ with st.sidebar:
             help="console.groq.com 에서 1분 만에 무료로 발급받을 수 있습니다."
         )
         st.session_state.groq_key = input_groq_key
-        # Groq API 키가 입력되어 있으면 활성 모델 목록을 실시간으로 가져옴
-        groq_dynamic_models = []
-        if input_groq_key:
-            try:
-                res = requests.get(
-                    "https://api.groq.com/openai/v1/models",
-                    headers={"Authorization": f"Bearer {input_groq_key}"},
-                    timeout=3
-                )
-                if res.status_code == 200:
-                    models_data = res.json().get("data", [])
-                    # whisper 및 guard 모델 제외하고 텍스트 생성 모델만 추출
-                    groq_dynamic_models = sorted([
-                        m["id"] for m in models_data 
-                        if "whisper" not in m["id"] and "guard" not in m["id"]
-                    ])
-            except:
-                pass
+        # Groq API 키가 입력되어 있으면 활성 모델 목록을 캐시에서 빠르게 가져옴
+        groq_dynamic_models = get_groq_models_cached(input_groq_key)
         
         fallback_models = [
             "openai/gpt-oss-120b",
