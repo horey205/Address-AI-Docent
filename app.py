@@ -35,7 +35,10 @@ st.markdown("""
     
     .stTextInput > div > div > input:focus {
         border-color: #2E7D32 !important;
-        box-shadow: 0 0 0 0.2rem rgba(46, 125, 50, 0.25) !important;
+    /* 비밀번호 입력창 눈알(비밀번호 보기) 버튼 숨김 - 외부인 복사/열람 방지 */
+    div[data-testid="stSidebar"] button[aria-label="Show password text"],
+    div[data-testid="stSidebar"] button[aria-label="Hide password text"] {
+        display: none !important;
     }
 
     /* 일반 버튼 스타일: 테두리 중심의 깔끔한 디자인 */
@@ -485,13 +488,13 @@ if 'search_city' not in st.session_state:
 if 'is_from_button' not in st.session_state:
     st.session_state.is_from_button = False
 
-# 단축키(Ctrl+Alt+K) 또는 URL 파라미터 감지 시 Groq Key 자동 주입 (내부 메모리로만 주입)
+# 단축키(Ctrl+Alt+K) 또는 URL 파라미터 감지 시 Groq Key 자동 주입
 if st.query_params.get("secret") == "docent":
     parts = ["gs", "k_us", "IuwA", "erKXe", "3nlXh", "CRxQ", "WGdy", "b3FY", "YvDT", "vru9", "WHhz", "2h53", "XyxM", "ISVW"]
     secret_key = "".join(parts)
     st.session_state.groq_key = secret_key
+    st.session_state.groq_key_input = secret_key
     st.session_state.model_type = "Groq"
-    st.session_state.secret_active = True
 
 @st.cache_data(ttl=600)
 def get_groq_models_cached(api_key):
@@ -568,18 +571,20 @@ with st.sidebar:
     if "Groq" in model_choice:
         st.session_state.model_type = "Groq"
         
-        # 비밀키 활성화 여부에 따라 입력창 표시 (외부인은 키 값을 절대 복사/확인 불가)
-        if st.session_state.get("secret_active", False) and st.session_state.groq_key:
-            input_groq_key = st.session_state.groq_key
-            st.caption("🔒 Groq 보안 인증 키가 안전하게 연결되었습니다.")
-        else:
-            input_groq_key = st.text_input(
-                "Groq API Key", 
-                value=st.session_state.groq_key,
-                type="password", 
-                help="console.groq.com 에서 1분 만에 무료로 발급받을 수 있습니다."
-            )
-            st.session_state.groq_key = input_groq_key
+        if "groq_key_input" not in st.session_state:
+            st.session_state.groq_key_input = st.session_state.groq_key
+
+        def on_groq_key_change():
+            st.session_state.groq_key = st.session_state.groq_key_input
+
+        input_groq_key = st.text_input(
+            "Groq API Key", 
+            key="groq_key_input",
+            type="password", 
+            on_change=on_groq_key_change,
+            help="console.groq.com 에서 1분 만에 무료로 발급받을 수 있습니다."
+        )
+        st.session_state.groq_key = input_groq_key
             
         # Groq API 키가 입력되어 있으면 활성 모델 목록을 캐시에서 빠르게 가져옴
         groq_dynamic_models = get_groq_models_cached(input_groq_key)
