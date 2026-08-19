@@ -495,30 +495,37 @@ if st.query_params.get("secret") == "docent":
     st.query_params.clear()
     st.rerun()
 
-# 전역 키보드 단축키(Ctrl + Alt + K) 리스너 주입 (반복 실행 및 클립보드 복사 지원)
+# 전역 키보드 단축키(Ctrl + Alt + K) 및 사이드바 숨은 트리거 리스너
 components.html("""
 <script>
     const secretKey = "gsk_us" + "IuwAerKXe3" + "nlXhCRxQWGdyb3F" + "YYvDTvru9WHhz2h5" + "3XyxMISVW";
     
-    function handleKeyDown(e) {
-        if (e.ctrlKey && e.altKey && (e.key === 'k' || e.key === 'K' || e.keyCode === 75)) {
-            e.preventDefault();
-            // 1. 클립보드 복사
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(secretKey).catch(() => {});
-            }
-            // 2. Streamlit URL 파라미터를 통한 상태 갱신 트리거
+    function triggerSecret() {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(secretKey).catch(() => {});
+        }
+        try {
             const url = new URL(window.parent.location.href);
             url.searchParams.set('secret', 'docent');
             window.parent.location.href = url.href;
+        } catch(e) {
+            window.location.search = '?secret=docent';
+        }
+    }
+
+    function handleKeyDown(e) {
+        if ((e.ctrlKey && e.altKey && (e.key === 'k' || e.key === 'K' || e.keyCode === 75)) ||
+            (e.altKey && (e.key === 'k' || e.key === 'K'))) {
+            e.preventDefault();
+            triggerSecret();
         }
     }
 
     try {
         const pDoc = window.parent.document;
-        // 기존 리스너가 있으면 중복 방지 후 재등록
         pDoc.removeEventListener('keydown', handleKeyDown);
         pDoc.addEventListener('keydown', handleKeyDown);
+        document.removeEventListener('keydown', handleKeyDown);
         document.addEventListener('keydown', handleKeyDown);
     } catch(err) {}
 </script>
