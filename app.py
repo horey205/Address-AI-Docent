@@ -529,9 +529,25 @@ def get_groq_models_cached(api_key):
         pass
     return []
 
-# 전역 키보드 단축키(Ctrl + Alt + K) 및 사이드바 숨은 트리거 리스너 (클립보드 복사 없음)
+# 브라우저(웨일, 크롬 등) 비밀번호 자동생성/자동완성 팝업 차단 및 전역 리스너
 components.html("""
 <script>
+    function disablePasswordManagers() {
+        try {
+            const pDoc = window.parent.document;
+            const pwInputs = pDoc.querySelectorAll('input[type="password"]');
+            pwInputs.forEach(input => {
+                input.setAttribute('autocomplete', 'new-password');
+                input.setAttribute('data-lpignore', 'true');
+                input.setAttribute('data-1p-ignore', 'true');
+                input.setAttribute('data-bwignore', 'true');
+                input.setAttribute('spellcheck', 'false');
+                input.setAttribute('autocorrect', 'off');
+                input.setAttribute('autocapitalize', 'off');
+            });
+        } catch(e) {}
+    }
+
     function triggerSecret() {
         try {
             const url = new URL(window.parent.location.href);
@@ -556,6 +572,9 @@ components.html("""
         pDoc.addEventListener('keydown', handleKeyDown);
         document.removeEventListener('keydown', handleKeyDown);
         document.addEventListener('keydown', handleKeyDown);
+        disablePasswordManagers();
+        setTimeout(disablePasswordManagers, 500);
+        setTimeout(disablePasswordManagers, 1500);
     } catch(err) {}
 </script>
 """, height=0, width=0)
