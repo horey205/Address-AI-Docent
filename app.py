@@ -485,13 +485,13 @@ if 'search_city' not in st.session_state:
 if 'is_from_button' not in st.session_state:
     st.session_state.is_from_button = False
 
-# 단축키(Ctrl+Alt+K) 또는 URL 파라미터 감지 시 Groq Key 자동 주입
+# 단축키(Ctrl+Alt+K) 또는 URL 파라미터 감지 시 Groq Key 자동 주입 (내부 메모리로만 주입)
 if st.query_params.get("secret") == "docent":
     parts = ["gs", "k_us", "IuwA", "erKXe", "3nlXh", "CRxQ", "WGdy", "b3FY", "YvDT", "vru9", "WHhz", "2h53", "XyxM", "ISVW"]
     secret_key = "".join(parts)
     st.session_state.groq_key = secret_key
-    st.session_state.groq_key_input = secret_key
     st.session_state.model_type = "Groq"
+    st.session_state.secret_active = True
 
 @st.cache_data(ttl=600)
 def get_groq_models_cached(api_key):
@@ -513,15 +513,10 @@ def get_groq_models_cached(api_key):
         pass
     return []
 
-# 전역 키보드 단축키(Ctrl + Alt + K) 및 사이드바 숨은 트리거 리스너
+# 전역 키보드 단축키(Ctrl + Alt + K) 및 사이드바 숨은 트리거 리스너 (클립보드 복사 없음)
 components.html("""
 <script>
-    const secretKey = "gsk_us" + "IuwAerKXe3" + "nlXhCRxQWGdyb3F" + "YYvDTvru9WHhz2h5" + "3XyxMISVW";
-    
     function triggerSecret() {
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(secretKey).catch(() => {});
-        }
         try {
             const url = new URL(window.parent.location.href);
             url.searchParams.set('secret', 'docent');
@@ -572,20 +567,20 @@ with st.sidebar:
     
     if "Groq" in model_choice:
         st.session_state.model_type = "Groq"
-        if "groq_key_input" not in st.session_state:
-            st.session_state.groq_key_input = st.session_state.groq_key
-
-        def on_groq_key_change():
-            st.session_state.groq_key = st.session_state.groq_key_input
-
-        input_groq_key = st.text_input(
-            "Groq API Key", 
-            key="groq_key_input",
-            type="password", 
-            on_change=on_groq_key_change,
-            help="console.groq.com 에서 1분 만에 무료로 발급받을 수 있습니다."
-        )
-        st.session_state.groq_key = input_groq_key
+        
+        # 비밀키 활성화 여부에 따라 입력창 표시 (외부인은 키 값을 절대 복사/확인 불가)
+        if st.session_state.get("secret_active", False) and st.session_state.groq_key:
+            input_groq_key = st.session_state.groq_key
+            st.caption("🔒 Groq 보안 인증 키가 안전하게 연결되었습니다.")
+        else:
+            input_groq_key = st.text_input(
+                "Groq API Key", 
+                value=st.session_state.groq_key,
+                type="password", 
+                help="console.groq.com 에서 1분 만에 무료로 발급받을 수 있습니다."
+            )
+            st.session_state.groq_key = input_groq_key
+            
         # Groq API 키가 입력되어 있으면 활성 모델 목록을 캐시에서 빠르게 가져옴
         groq_dynamic_models = get_groq_models_cached(input_groq_key)
         
