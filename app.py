@@ -35,10 +35,23 @@ st.markdown("""
     
     .stTextInput > div > div > input:focus {
         border-color: #2E7D32 !important;
-    /* 비밀번호 입력창 눈알(비밀번호 보기) 버튼 숨김 - 외부인 복사/열람 방지 */
-    div[data-testid="stSidebar"] button[aria-label="Show password text"],
-    div[data-testid="stSidebar"] button[aria-label="Hide password text"] {
+        box-shadow: 0 0 0 0.2rem rgba(46, 125, 50, 0.25) !important;
+    }
+    
+    /* 비밀번호 입력창 눈알(비밀번호 보기/숨기기) 버튼 및 메뉴 완전 삭제 */
+    .stTextInput button,
+    div[data-testid="stTextInput"] button,
+    div[data-testid="stSidebar"] div[data-testid="stTextInput"] button,
+    button[aria-label*="password"],
+    button[aria-label*="Password"],
+    button[aria-label*="비밀번호"],
+    div[data-testid="stTextInput"] svg {
         display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        opacity: 0 !important;
     }
 
     /* 일반 버튼 스타일: 테두리 중심의 깔끔한 디자인 */
