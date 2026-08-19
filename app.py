@@ -133,26 +133,40 @@ st.markdown("""
         }
     }
     
-    /* 마이크 히든 버튼 스타일 */
-    .mic-stealth-btn button {
+    /* 마이크 히든 버튼 스타일: 테두리/배경 완전히 제거하여 일반 글자처럼 보이게 */
+    div:has(> .stButton > button[key="secret_groq_key_btn"]),
+    .stButton:has(> button[key="secret_groq_key_btn"]),
+    .stButton > button[key="secret_groq_key_btn"],
+    div[data-testid="column"]:first-child .stButton > button {
         background: transparent !important;
+        background-color: transparent !important;
         border: none !important;
+        outline: none !important;
         box-shadow: none !important;
         padding: 0 !important;
+        min-height: 0 !important;
         height: auto !important;
+        width: auto !important;
         cursor: pointer !important;
         transition: transform 0.2s ease !important;
     }
-    .mic-stealth-btn button p {
-        font-size: 2.2rem !important;
+    div[data-testid="column"]:first-child .stButton > button p,
+    div[data-testid="column"]:first-child .stButton > button span,
+    div[data-testid="column"]:first-child .stButton > button div {
+        font-size: 2.8rem !important;
         line-height: 1 !important;
         margin: 0 !important;
         padding: 0 !important;
     }
-    .mic-stealth-btn button:hover {
+    div[data-testid="column"]:first-child .stButton > button:hover,
+    div[data-testid="column"]:first-child .stButton > button:focus,
+    div[data-testid="column"]:first-child .stButton > button:active {
         background: transparent !important;
-        transform: scale(1.15) !important;
+        background-color: transparent !important;
+        border: none !important;
+        outline: none !important;
         box-shadow: none !important;
+        transform: scale(1.15) !important;
     }
 </style>
 """, unsafe_allow_html=True)
