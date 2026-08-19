@@ -133,27 +133,26 @@ st.markdown("""
         }
     }
     
-    /* 마이크 히든 버튼 스타일: 테두리/배경 완전히 제거하여 일반 글자처럼 보이게 */
-    div:has(> .stButton > button[key="secret_groq_key_btn"]),
-    .stButton:has(> button[key="secret_groq_key_btn"]),
-    .stButton > button[key="secret_groq_key_btn"],
+    /* 마이크 히든 버튼: 하얀 테두리 + 클릭해도 아무런 시각적 변화 없도록 설정 */
     div[data-testid="column"]:first-child .stButton > button {
-        background: transparent !important;
-        background-color: transparent !important;
-        border: none !important;
+        background-color: #ffffff !important;
+        background: #ffffff !important;
+        border: 2px solid #ffffff !important;
         outline: none !important;
         box-shadow: none !important;
+        border-radius: 15px !important;
         padding: 0 !important;
         min-height: 0 !important;
-        height: auto !important;
-        width: auto !important;
-        cursor: pointer !important;
-        transition: transform 0.2s ease !important;
+        height: 60px !important;
+        width: 100% !important;
+        cursor: default !important;
+        transition: none !important;
+        transform: none !important;
     }
     div[data-testid="column"]:first-child .stButton > button p,
     div[data-testid="column"]:first-child .stButton > button span,
     div[data-testid="column"]:first-child .stButton > button div {
-        font-size: 2.8rem !important;
+        font-size: 3.2rem !important;
         line-height: 1 !important;
         margin: 0 !important;
         padding: 0 !important;
@@ -161,12 +160,12 @@ st.markdown("""
     div[data-testid="column"]:first-child .stButton > button:hover,
     div[data-testid="column"]:first-child .stButton > button:focus,
     div[data-testid="column"]:first-child .stButton > button:active {
-        background: transparent !important;
-        background-color: transparent !important;
-        border: none !important;
+        background-color: #ffffff !important;
+        background: #ffffff !important;
+        border: 2px solid #ffffff !important;
         outline: none !important;
         box-shadow: none !important;
-        transform: scale(1.15) !important;
+        transform: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
