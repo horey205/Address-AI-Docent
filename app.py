@@ -246,24 +246,32 @@ def save_docent_cache(city, road, lang, script, audio_path):
 def generate_docent_story(city, road, reason, target_lang="한국어", model_type="Groq", groq_key="", groq_model="llama-3.3-70b-versatile", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free", api_key=""):
     """초고속 무료 Groq(1위) 또는 다기능 OpenRouter(3위)를 활용하여 최상의 다국어 도슨트 해설을 생성합니다."""
     lang_name = VOICE_CONFIG.get(target_lang, VOICE_CONFIG["한국어"])["lang_name"]
-    
+    # 언어별 시작 멘트
+    openings = {
+        "Korean": f"{road} 도로명주소 부여의 의미를 알려주는 '도로명주소 AI 도슨트'입니다.",
+        "English": f"Welcome! I am your AI Docent, here to share the story behind {road}.",
+        "Chinese": f"大家好！我是道路名AI导览员，今天为您讲述{road}背后的历史故事。",
+        "Japanese": f"ようこそ！{road}の由来と歴史をご紹介する「道路名AIドーセント」です。"
+    }
+    intro_phrase = openings.get(lang_name, openings["Korean"])
+
     # 공통 고품질 프롬프트
     prompt = f"""
     당신은 친절한 '우리 동네 주소 전문 도슨트'이자 역사·지리 스토리텔링 전문가입니다.
     제공된 [공식 유래] 데이터를 바탕으로, 해당 도로명이 지닌 가치와 의미를 사용자에게 쉽고 흥미롭게 들려주세요.
 
-    [작성 규칙]
-    1. **유래 기반의 사실적 스토리텔링**:
+    [작성 규칙 - 엄격 준수]
+    1. **절대 생각 과정(Thinking process, Chain of thought 등)을 출력하지 마세요.** 오직 최종 도슨트 대본만 출력하세요.
+    2. **유래 기반의 사실적 스토리텔링**:
        - 공식 유래({reason})가 구체적인 역사적 사건, 인물, 혹은 국제 교류(예: 테헤란로) 등 명확한 사실에 기반한 경우, 억지 전설이나 성씨 집성촌 같은 무관한 가설을 절대 꾸며내어 덧붙이지 마세요. 오직 해당 사실과 그 역사적/문화적 의의에 집중하세요.
-       - 만약 공식 유래가 "옛 지명에서 유래"와 같이 매우 단순하고 모호할 때만, 해당 지역({city})의 행정구역 변천사나 지리학적 특성, 혹은 지명 한자의 자연스러운 의미를 엮어 친근하게 설명하세요.
-    2. **자연스러운 맥락 유지**: 없는 사실을 지어내어 강제로 끼워 맞추지 말고, 흐름이 매끄럽고 사실에 부합하도록 구성하세요.
+       - 만약 공식 유래가 "옛 지명에서 유래"와 같이 단순할 때만, 해당 지역({city})의 특성이나 지명 한자의 자연스러운 의미를 엮어 친근하게 설명하세요.
     3. **출력 언어 및 첫마디**:
-       - 반드시 모든 내용을 '{lang_name}'로 자연스럽게 작성해 주세요.
-       - 첫마디는 반드시 다음과 같이 시작하세요: "{road} 도로명주소 부여의 의미를 알려주는 '도로명주소 AI 도슨트'입니다." (반갑습니다 같은 인사는 생략)
+       - 반드시 모든 내용을 '{lang_name}'로 유창하게 작성해 주세요.
+       - 첫마디는 반드시 다음과 같이 시작하세요: "{intro_phrase}"
     4. **말투 및 분량**:
-       - 다정하고 조근조근한 이야기꾼(Storyteller)의 어조를 사용하세요 (~인 것이죠, ~전해진답니다 등).
-       - 분량은 300~500자 내외(30초 내외 낭독용)로 간결하면서도 여운을 주도록 작성하세요.
-    5. **금지어**: "부여사유", "호 인용", "공식", "데이터", "반갑습니다"
+       - 다정하고 조근조근한 이야기꾼(Storyteller)의 어조를 사용하세요.
+       - 분량은 300~500자 내외(30초 내외 낭독용)로 간결하게 작성하세요.
+    5. **금지어**: "부여사유", "호 인용", "공식", "데이터", "Here's a thinking process"
 
     [데이터]
     - 위치: {city}
@@ -284,7 +292,7 @@ def generate_docent_story(city, road, reason, target_lang="한국어", model_typ
             payload = {
                 "model": groq_model,
                 "messages": [
-                    {"role": "system", "content": "You are a professional local tour docent and historical storyteller. Write vivid and engaging stories in the requested language."},
+                    {"role": "system", "content": "You are a professional local tour docent and historical storyteller. Output ONLY the final docent script in the requested language. Do NOT output any thinking process, analysis, or explanation."},
                     {"role": "user", "content": prompt}
                 ],
                 "temperature": 0.7,
@@ -292,7 +300,15 @@ def generate_docent_story(city, road, reason, target_lang="한국어", model_typ
             }
             resp = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=30)
             if resp.status_code == 200:
-                return resp.json()['choices'][0]['message']['content'].strip()
+                raw_text = resp.json()['choices'][0]['message']['content'].strip()
+                # <think>...</think> 태그나 "Here's a thinking process:" 등 생각 과정 제거
+                import re
+                cleaned = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL)
+                if "Here's a thinking process" in cleaned:
+                    parts = cleaned.split("\n\n")
+                    # 생각 과정 이후의 실제 이야기 본문만 추출
+                    cleaned = parts[-1] if len(parts) > 1 else cleaned
+                return cleaned.strip()
             else:
                 return f"Groq API 오류 ({resp.status_code}): {resp.text}"
         except Exception as e:
