@@ -212,13 +212,20 @@ def init_db():
     conn.close()
 
 def get_cached_docent(city, road, lang="한국어"):
+    # 1. 먼저 학생의 이번 세션(로컬 실습)에서 생성한 도감 탐색
+    clean_city = city.replace(" ", "") if city else ""
+    clean_road = road.replace(" ", "") if road else ""
+    
+    if "session_docent_cache" in st.session_state:
+        for item in st.session_state.session_docent_cache:
+            if (clean_city in item["city"].replace(" ", "") and 
+                clean_road == item["road"].replace(" ", "") and 
+                lang == item["lang"]):
+                return (item["script"], item["audio_path"])
+
+    # 2. 없으면 서버에 보존된 공식 홍보용 마스터 DB에서 탐색
     try:
         conn = sqlite3.connect(DB_FILE)
-        # 검색어 클리닝
-        clean_city = city.replace(" ", "") if city else ""
-        clean_road = road.replace(" ", "") if road else ""
-        
-        # [정밀 타격] 도시명과 도로명, 그리고 '언어'가 100% 일치해야만 가져옵니다.
         query = """
             SELECT script, audio_path FROM story_cache 
             WHERE REPLACE(city, ' ', '') LIKE ? 
@@ -227,7 +234,6 @@ def get_cached_docent(city, road, lang="한국어"):
             LIMIT 1
         """
         row = conn.execute(query, (f'%{clean_city}%', clean_road, lang)).fetchone()
-        
         conn.close()
         return row
     except Exception as e:
@@ -236,12 +242,34 @@ def get_cached_docent(city, road, lang="한국어"):
 init_db()
 
 def save_docent_cache(city, road, lang, script, audio_path):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('INSERT OR REPLACE INTO story_cache (city, road, lang, script, audio_path) VALUES (?, ?, ?, ?, ?)', 
-              (city, road, lang, script, audio_path))
-    conn.commit()
-    conn.close()
+    # 1. 학생의 로컬 세션 도감에 저장 (임시 개인 보관)
+    if "session_docent_cache" not in st.session_state:
+        st.session_state.session_docent_cache = []
+    
+    # 중복 제거 후 추가
+    st.session_state.session_docent_cache = [
+        item for item in st.session_state.session_docent_cache 
+        if not (item["city"] == city and item["road"] == road and item["lang"] == lang)
+    ]
+    st.session_state.session_docent_cache.insert(0, {
+        "city": city,
+        "road": road,
+        "lang": lang,
+        "script": script,
+        "audio_path": audio_path,
+        "created_at": time.strftime("%Y-%m-%d %H:%M")
+    })
+    
+    # 2. 서버 로컬 DB에도 캐싱 시도
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('INSERT OR REPLACE INTO story_cache (city, road, lang, script, audio_path) VALUES (?, ?, ?, ?, ?)', 
+                  (city, road, lang, script, audio_path))
+        conn.commit()
+        conn.close()
+    except:
+        pass
 
 def generate_docent_story(city, road, reason, target_lang="한국어", model_type="Groq", groq_key="", groq_model="llama-3.3-70b-versatile", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free", api_key=""):
     """초고속 무료 Groq(1위) 또는 다기능 OpenRouter(3위)를 활용하여 최상의 다국어 도슨트 해설을 생성합니다."""
@@ -531,28 +559,57 @@ with st.sidebar:
 
     st.divider()
     
-    st.header("📚 내 도슨트 도감")
-    st.write("지금까지 들어본 길의 목록입니다.")
-    # DB에서 지금까지 생성된 길 목록 가져오기
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        c = conn.cursor()
-        c.execute('SELECT city, road, lang FROM story_cache ORDER BY id DESC')
-        history = c.fetchall()
-        conn.close()
-        
-        if history:
-            st.caption(f"총 {len(history)}개의 사례가 보존되어 있습니다.")
-            for city, road, lang in history:
-                if st.button(f"🏷️ {city} {road} ({lang})", key=f"hist_{city}_{road}_{lang}"):
-                    st.session_state.search_input = road
-                    st.session_state.search_city = city
-                    # 클릭한 항목의 언어로 자동 설정
-                    st.session_state.target_lang_from_hist = lang
+    st.header("📚 도슨트 도감")
+    
+    # 탭으로 분리: 1) 오늘 내가 만든 도감(로컬 실습)  2) 공식 추천 사례(홍보용)
+    doc_tab1, doc_tab2 = st.tabs(["📝 오늘 내 실습 도감", "🏛️ 공식 추천 사례"])
+    
+    with doc_tab1:
+        my_session_cache = st.session_state.get("session_docent_cache", [])
+        if my_session_cache:
+            st.caption(f"오늘 내가 탐색한 {len(my_session_cache)}개의 길입니다.")
+            for idx, item in enumerate(my_session_cache):
+                c_city = item["city"]
+                c_road = item["road"]
+                c_lang = item["lang"]
+                if st.button(f"✨ {c_city} {c_road} ({c_lang})", key=f"my_hist_{idx}_{c_city}_{c_road}_{c_lang}"):
+                    st.session_state.search_input = c_road
+                    st.session_state.search_city = c_city
+                    st.session_state.target_lang_from_hist = c_lang
                     st.session_state.is_from_button = True
                     st.rerun()
-    except Exception as e:
-        st.caption(f"도감 정보를 불러올 수 없습니다. ({e})")
+            
+            # 실습 과제 제출/보관용 JSON 다운로드
+            json_str = json.dumps(my_session_cache, ensure_ascii=False, indent=2)
+            st.download_button(
+                label="💾 오늘 내 도감 저장 (JSON)",
+                data=json_str,
+                file_name=f"내_주소도슨트_{time.strftime('%Y%m%d')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+        else:
+            st.info("💡 아직 오늘 생성한 해설이 없습니다. 길을 검색하고 해설을 들어보세요!")
+            
+    with doc_tab2:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            c = conn.cursor()
+            c.execute('SELECT city, road, lang FROM story_cache ORDER BY id DESC')
+            history = c.fetchall()
+            conn.close()
+            
+            if history:
+                st.caption(f"서버에 영구 보존된 대표 사례 {len(history)}개입니다.")
+                for city, road, lang in history:
+                    if st.button(f"🏷️ {city} {road} ({lang})", key=f"hist_{city}_{road}_{lang}"):
+                        st.session_state.search_input = road
+                        st.session_state.search_city = city
+                        st.session_state.target_lang_from_hist = lang
+                        st.session_state.is_from_button = True
+                        st.rerun()
+        except Exception as e:
+            st.caption(f"도감 정보를 불러올 수 없습니다. ({e})")
 
 # 앱 구성 (나머지 동일)
 st.title("🎙️ 주소 AI 도슨트")
