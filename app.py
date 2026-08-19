@@ -33,9 +33,10 @@ st.markdown("""
         box-shadow: 0 2px 5px rgba(0,0,0,0.02);
     }
     
-    .stTextInput > div > div > input:focus {
-        border-color: #2E7D32 !important;
-        box-shadow: 0 0 0 0.2rem rgba(46, 125, 50, 0.25) !important;
+    /* 사이드바 API 키 입력창: 브라우저 비밀번호 팝업을 차단하면서 글자는 점자(***)로 마스킹 */
+    div[data-testid="stSidebar"] .stTextInput input {
+        -webkit-text-security: disc !important;
+        text-security: disc !important;
     }
     
     /* 비밀번호 입력창 눈알(비밀번호 보기/숨기기) 버튼 및 메뉴 완전 삭제 */
@@ -619,7 +620,7 @@ with st.sidebar:
         input_groq_key = st.text_input(
             "Groq API Key", 
             key="user_custom_key",
-            type="password", 
+            type="default", 
             value=st.session_state.user_custom_key,
             on_change=on_custom_key_change,
             placeholder="******" if has_secret_injected else "API 키를 입력하세요",
