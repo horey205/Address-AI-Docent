@@ -537,7 +537,13 @@ with st.sidebar:
     
     st.divider()
     
-    st.header("⚙️ AI 모델 설정")
+    # 사이드바 제목 (⚙️ 클릭 시 숨은 Groq Key 자동 입력)
+    st.markdown("""
+        <h2 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 6px;">
+            <a href="?secret=docent" style="text-decoration: none; cursor: default; user-select: none;">⚙️</a>
+            <span>AI 모델 설정</span>
+        </h2>
+    """, unsafe_allow_html=True)
     
     # 2가지 무료 모델 옵션
     model_choice = st.radio(
