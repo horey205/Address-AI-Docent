@@ -131,16 +131,23 @@ st.markdown("""
         .recommend-card {
             margin-bottom: 15px;
         }
+    }
+    
     /* 마이크 히든 버튼 스타일 */
     .mic-stealth-btn button {
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
-        font-size: 2.1rem !important;
         padding: 0 !important;
-        line-height: 1 !important;
+        height: auto !important;
         cursor: pointer !important;
         transition: transform 0.2s ease !important;
+    }
+    .mic-stealth-btn button p {
+        font-size: 2.2rem !important;
+        line-height: 1 !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
     .mic-stealth-btn button:hover {
         background: transparent !important;
@@ -644,7 +651,7 @@ with st.sidebar:
             st.caption(f"도감 정보를 불러올 수 없습니다. ({e})")
 
 # 앱 구성 (상단 헤더 및 마이크 이스터에그)
-title_col1, title_col2 = st.columns([1, 12], vertical_alignment="center")
+title_col1, title_col2 = st.columns([0.8, 9.2], vertical_alignment="center")
 with title_col1:
     st.markdown('<div class="mic-stealth-btn">', unsafe_allow_html=True)
     if st.button("🎙️", key="secret_groq_key_btn", help="주소 AI 도슨트"):
@@ -663,7 +670,7 @@ with title_col1:
     st.markdown('</div>', unsafe_allow_html=True)
 
 with title_col2:
-    st.markdown('<h1 style="text-align: left; margin: 0; padding: 0;">주소 AI 도슨트</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 style="text-align: left; margin: 0; padding: 0; font-size: 2.25rem;">주소 AI 도슨트</h1>', unsafe_allow_html=True)
 
 st.write("우리 동네 길 위에 숨겨진 흥미로운 이야기를 들려드립니다.")
 
