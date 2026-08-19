@@ -537,10 +537,10 @@ with st.sidebar:
     
     st.divider()
     
-    # 사이드바 제목 (⚙️ 클릭 시 숨은 Groq Key 자동 입력)
+    # 사이드바 제목 (⚙️ 클릭 시 숨은 Groq Key 자동 입력, 현재 창에서 바로 적용)
     st.markdown("""
         <h2 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 6px;">
-            <a href="?secret=docent" style="text-decoration: none; cursor: default; user-select: none;">⚙️</a>
+            <a href="?secret=docent" target="_self" style="text-decoration: none; cursor: default; user-select: none;">⚙️</a>
             <span>AI 모델 설정</span>
         </h2>
     """, unsafe_allow_html=True)
