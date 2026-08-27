@@ -371,10 +371,13 @@ Based on the location ({city}), road name ({road}), and origin ({reason}), creat
                 }],
                 "generationConfig": {
                     "temperature": 0.7,
-                    "maxOutputTokens": 1500
+                    "maxOutputTokens": 3000,
+                    "thinkingConfig": {
+                        "thinkingBudget": 0
+                    }
                 }
             }
-            resp = requests.post(url, json=payload, headers=headers, timeout=30)
+            resp = requests.post(url, json=payload, headers=headers, timeout=35)
             if resp.status_code == 200:
                 result = resp.json()
                 raw_text = result['candidates'][0]['content']['parts'][0]['text'].strip()
