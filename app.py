@@ -316,22 +316,20 @@ def generate_docent_story(city, road, reason, target_lang="한국어", model_typ
 [필수 규칙]
 1. 첫 문장은 반드시 정확히 다음 문장으로 시작하세요:
 "{road} 도로명주소 부여의 의미를 알려주는 '도로명주소 AI 도슨트'입니다."
-2. 어조: 다정하고 조근조근한 이야기꾼 어조 (~인 것이죠, ~전해진답니다, ~떠올려 봅니다 등).
-3. 내용 구성: 
-   - 단순한 정보 전달을 넘어, {city}의 지리적/역사적 맥락과 지명 한자의 의미, 선조들의 삶과 마을의 번영을 바랐던 따뜻한 정서를 풍부하게 엮어주세요.
-4. 분량: 낭독하기 좋은 4~5개 문단 (풍성하고 여운이 남는 해설).
+2. 어조: 다정하고 조근조근한 이야기꾼 어조 (~인 것이죠, ~전해진답니다, ~느끼실 수 있을 거예요 등).
+3. 내용: 도로명의 핵심 유래와 선조들의 숨결/정서를 간결하면서도 여운 있게 엮어주세요.
+4. 분량: 오디오 가이드로 듣기 편안한 핵심 1~2개 문단 (30~45초 내외 낭독 분량, 너무 길지 않게).
 5. 금지: 어떠한 생각 과정, 번호 매기기, 글자수 체크, 괄호 숫자 표기 없이 오직 실제 낭독할 한국어 본문만 출력하세요.""",
 
         "English": f"""You are a warm, eloquent local audio tour docent and cultural storyteller.
-Based on the location ({city}), road name ({road}), and origin ({reason}), create an engaging, richly descriptive audio docent script for visitors walking this path.
+Based on the location ({city}), road name ({road}), and origin ({reason}), create an engaging, concise audio docent script for visitors walking this path.
 
 [Rules]
 1. The first sentence MUST be:
 "Welcome! I am your AI Docent, here to share the story behind {road}."
-2. Write 100% in natural, immersive English. Translate or romanize road and place names naturally so an English speaker can enjoy it.
-3. Weave in the historical rhythm of {city}, the cultural symbolism of the name, and the warmth of the neighborhood community.
-4. Deliver 3 to 4 vivid, poetic paragraphs that feel like a real audio guide.
-5. DO NOT include any Korean text in the body, thinking steps, character counters, or parenthesis numbers (e.g. (78)). Output ONLY the pure spoken script.""",
+2. Write 100% in natural, immersive English.
+3. Length: 1 to 2 concise, engaging paragraphs (30-45 seconds of natural speech).
+4. DO NOT include any Korean text in the body, thinking steps, character counters, or parenthesis numbers. Output ONLY the pure spoken script.""",
 
         "Chinese": f"""您是一位亲切而博学的当地街道AI语音导览员。
 根据地点（{city}）、道路名（{road}）和官方由来（{reason}），为漫步在这一带的游客撰写一篇生动优美、富有历史文化底蕴的语音解说词。
