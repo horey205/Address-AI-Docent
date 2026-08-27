@@ -20,3 +20,4 @@ Thumbs.db
 *.txt
 test_gemini.py
 *.bak
+backup/
