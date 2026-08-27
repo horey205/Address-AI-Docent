@@ -369,6 +369,7 @@ Based on the location ({city}), road name ({road}), and origin ({reason}), creat
                 "contents": [{
                     "parts": [{"text": selected_prompt}]
                 }],
+                "tools": [{"googleSearch": {}}],
                 "generationConfig": {
                     "temperature": 0.7,
                     "maxOutputTokens": 3000,
