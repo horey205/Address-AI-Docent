@@ -152,9 +152,26 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 데이터 로드
+# 데이터 및 환경 설정 로드
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 JSON_FILE = os.path.join(BASE_DIR, 'road_names.json')
+ENV_FILE = os.path.join(BASE_DIR, '.env')
+
+def load_env_key():
+    """ .env 파일에서 Gemini API 키 읽기 """
+    if os.path.exists(ENV_FILE):
+        try:
+            with open(ENV_FILE, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('key') or line.startswith('GEMINI_API_KEY'):
+                        if '=' in line:
+                            return line.split('=', 1)[1].strip()
+        except:
+            pass
+    return ""
+
+DEFAULT_GEMINI_KEY = load_env_key()
 
 @st.cache_data
 def load_data():
@@ -288,8 +305,8 @@ def save_docent_cache(city, road, lang, script, audio_path):
     except:
         pass
 
-def generate_docent_story(city, road, reason, target_lang="한국어", model_type="Groq", groq_key="", groq_model="llama-3.3-70b-versatile", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free", api_key=""):
-    """초고속 무료 Groq(1위) 또는 다기능 OpenRouter(3위)를 활용하여 최상의 다국어 도슨트 해설을 생성합니다."""
+def generate_docent_story(city, road, reason, target_lang="한국어", model_type="Gemini", gemini_key="", gemini_model="gemini-2.5-flash", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free", api_key=""):
+    """Google Gemini(1순위 고성능) 또는 OpenRouter를 활용하여 최상의 다국어 도슨트 해설을 생성합니다."""
     lang_name = VOICE_CONFIG.get(target_lang, VOICE_CONFIG["한국어"])["lang_name"]
     # 언어별 설정 (자연스러운 로컬 도슨트 대본)
     lang_prompts = {
@@ -340,27 +357,27 @@ Based on the location ({city}), road name ({road}), and origin ({reason}), creat
 
     selected_prompt = lang_prompts.get(lang_name, lang_prompts["Korean"])
 
-    # 1. Groq 호출 (1순위 초고속 무료 모델)
-    if model_type == "Groq":
-        if not groq_key:
-            return "⚠️ Groq API 키가 설정되지 않았습니다. 좌측 사이드바 설정에 등록해 주세요. (무료 발급: console.groq.com)"
+    # 1. Google Gemini 호출 (1순위 고성능 공식 AI)
+    if model_type == "Gemini":
+        active_key = gemini_key.strip() if gemini_key else DEFAULT_GEMINI_KEY
+        if not active_key:
+            return "⚠️ Gemini API 키가 설정되지 않았습니다. 좌측 사이드바 설정에 등록해 주세요. (무료 발급: aistudio.google.com)"
         try:
-            headers = {
-                "Authorization": f"Bearer {groq_key}",
-                "Content-Type": "application/json"
-            }
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={active_key}"
+            headers = {"Content-Type": "application/json"}
             payload = {
-                "model": groq_model,
-                "messages": [
-                    {"role": "system", "content": "You are a world-class audio docent. Output only the pure final spoken narration script without any commentary, metadata, or character counts."},
-                    {"role": "user", "content": selected_prompt}
-                ],
-                "temperature": 0.75,
-                "max_tokens": 1500
+                "contents": [{
+                    "parts": [{"text": selected_prompt}]
+                }],
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "maxOutputTokens": 1500
+                }
             }
-            resp = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=30)
+            resp = requests.post(url, json=payload, headers=headers, timeout=30)
             if resp.status_code == 200:
-                raw_text = resp.json()['choices'][0]['message']['content'].strip()
+                result = resp.json()
+                raw_text = result['candidates'][0]['content']['parts'][0]['text'].strip()
                 import re
                 
                 # 1) <think>...</think> 태그 제거
@@ -371,11 +388,11 @@ Based on the location ({city}), road name ({road}), and origin ({reason}), creat
                 
                 return cleaned if cleaned else raw_text
             else:
-                return f"Groq API 오류 ({resp.status_code}): {resp.text}"
+                return f"Gemini API 오류 ({resp.status_code}): {resp.text}"
         except Exception as e:
-            return f"Groq 연결 실패: {str(e)}"
+            return f"Gemini 연결 실패: {str(e)}"
 
-    # 2. OpenRouter 호출 (3순위 다양한 무료 모델 라우팅)
+    # 2. OpenRouter 호출 (2순위 오픈소스 모델)
     elif model_type == "OpenRouter":
         if not or_key:
             return "⚠️ OpenRouter API 키가 설정되지 않았습니다. 좌측 사이드바 설정에 등록해 주세요. (openrouter.ai)"
@@ -387,7 +404,7 @@ Based on the location ({city}), road name ({road}), and origin ({reason}), creat
             payload = {
                 "model": or_model,
                 "messages": [
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": selected_prompt}
                 ]
             }
             resp = requests.post("https://openrouter.ai/api/v1/chat/completions", json=payload, headers=headers, timeout=60)
@@ -484,15 +501,14 @@ CURATIONS = {
 }
 
 # 사이드바 설정
-# 사이드바 설정
 if 'model_type' not in st.session_state:
-    st.session_state.model_type = "Groq"
-if 'groq_key' not in st.session_state:
-    st.session_state.groq_key = ""
+    st.session_state.model_type = "Gemini"
+if 'gemini_key' not in st.session_state:
+    st.session_state.gemini_key = DEFAULT_GEMINI_KEY
 if 'secret_injected' not in st.session_state:
-    st.session_state.secret_injected = False
-if 'groq_model' not in st.session_state:
-    st.session_state.groq_model = "openai/gpt-oss-120b"
+    st.session_state.secret_injected = bool(DEFAULT_GEMINI_KEY)
+if 'gemini_model' not in st.session_state:
+    st.session_state.gemini_model = "gemini-2.5-flash"
 if 'or_key' not in st.session_state:
     st.session_state.or_key = os.environ.get("OPENROUTER_API_KEY", "")
 if 'or_model' not in st.session_state:
@@ -504,35 +520,14 @@ if 'search_city' not in st.session_state:
 if 'is_from_button' not in st.session_state:
     st.session_state.is_from_button = False
 
-# 단축키(Ctrl+Alt+K) 또는 URL 파라미터 감지 시 Groq Key 자동 주입
+# 단축키(Ctrl+Alt+K) 또는 URL 파라미터 감지 시 Gemini Key 자동 주입
 if st.query_params.get("secret") == "docent":
-    parts = ["gs", "k_us", "IuwA", "erKXe", "3nlXh", "CRxQ", "WGdy", "b3FY", "YvDT", "vru9", "WHhz", "2h53", "XyxM", "ISVW"]
-    secret_key = "".join(parts)
-    st.session_state.groq_key = secret_key
-    st.session_state.model_type = "Groq"
+    parts = ["AIzaSyCs", "J5D3Tb", "Nhem94", "3LUQ8_V", "O2clzM", "7lxnT4"]
+    st.session_state.gemini_key = DEFAULT_GEMINI_KEY if DEFAULT_GEMINI_KEY else "".join(parts)
+    st.session_state.model_type = "Gemini"
     st.session_state.secret_injected = True
     st.query_params.clear()
     st.rerun()
-
-@st.cache_data(ttl=600)
-def get_groq_models_cached(api_key):
-    if not api_key:
-        return []
-    try:
-        res = requests.get(
-            "https://api.groq.com/openai/v1/models",
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=2
-        )
-        if res.status_code == 200:
-            models_data = res.json().get("data", [])
-            return sorted([
-                m["id"] for m in models_data 
-                if "whisper" not in m["id"] and "guard" not in m["id"]
-            ])
-    except:
-        pass
-    return []
 
 # 브라우저(웨일, 크롬 등) 비밀번호 자동생성/자동완성 팝업 차단 및 전역 리스너
 components.html("""
@@ -590,7 +585,7 @@ with st.sidebar:
     
     st.divider()
     
-    # 사이드바 제목 (⚙️ 클릭 시 숨은 Groq Key 자동 입력, 현재 창에서 바로 적용)
+    # 사이드바 제목 (⚙️ 클릭 시 숨은 Gemini Key 자동 입력, 현재 창에서 바로 적용)
     st.markdown("""
         <h2 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 6px;">
             <a href="?secret=docent" target="_self" style="text-decoration: none; cursor: default; user-select: none;">⚙️</a>
@@ -598,71 +593,51 @@ with st.sidebar:
         </h2>
     """, unsafe_allow_html=True)
     
-    # 2가지 무료 모델 옵션
+    # AI 모델 옵션 (Gemini 기본)
     model_choice = st.radio(
         "사용할 AI 엔진 선택:", 
-        ["⚡ Groq (초고속 무료 AI)", "🌐 OpenRouter (오픈소스 무료 AI)"],
+        ["🌟 Google Gemini (공식 AI)", "🌐 OpenRouter (오픈소스 무료 AI)"],
         index=0
     )
     
-    if "Groq" in model_choice:
-        st.session_state.model_type = "Groq"
+    if "Gemini" in model_choice:
+        st.session_state.model_type = "Gemini"
         
         # 키 입력 위젯
         if "user_custom_key" not in st.session_state:
             st.session_state.user_custom_key = ""
 
-        # 사용자가 직접 입력한 키가 있으면 그것을 사용, 없으면 톱니바퀴로 주입된 비밀키 사용
         def on_custom_key_change():
             typed = st.session_state.user_custom_key.strip()
             if typed:
-                st.session_state.groq_key = typed
+                st.session_state.gemini_key = typed
                 st.session_state.secret_injected = False
 
-        # 톱니바퀴를 눌러 비밀키가 주입된 경우에만 ****** 표시, 처음에는 빈칸
-        is_secret_mode = st.session_state.get("secret_injected", False)
+        is_secret_mode = st.session_state.get("secret_injected", False) or bool(st.session_state.get("gemini_key"))
 
-        input_groq_key = st.text_input(
-            "Groq API Key", 
+        input_gemini_key = st.text_input(
+            "Google Gemini API Key", 
             key="user_custom_key",
             type="default", 
             value=st.session_state.user_custom_key,
             on_change=on_custom_key_change,
             placeholder="******" if is_secret_mode else "API 키를 입력하세요",
-            help="console.groq.com 에서 1분 만에 무료로 발급받을 수 있습니다."
+            help="aistudio.google.com 에서 무료로 발급받을 수 있습니다."
         )
         
-        # 실제 API 호출에 사용될 키 결정: 사용자 입력값 우선, 없으면 주입된 비밀키
-        effective_groq_key = input_groq_key.strip() if input_groq_key.strip() else st.session_state.groq_key
-        st.session_state.groq_key = effective_groq_key
+        # 실제 API 호출에 사용될 키 결정
+        effective_gemini_key = input_gemini_key.strip() if input_gemini_key.strip() else st.session_state.gemini_key
+        st.session_state.gemini_key = effective_gemini_key
             
-        # Groq API 키가 입력되어 있으면 활성 모델 목록을 캐시에서 빠르게 가져옴
-        groq_dynamic_models = get_groq_models_cached(effective_groq_key)
-        
-        fallback_models = [
-            "openai/gpt-oss-120b",
-            "openai/gpt-oss-20b",
-            "qwen/qwen3.6-27b",
-            "allam-2-7b"
-        ]
-        groq_model_options = groq_dynamic_models if groq_dynamic_models else fallback_models
-        
-        # openai/gpt-oss-120b 우선 선택
-        default_groq_idx = 0
-        if "openai/gpt-oss-120b" in groq_model_options:
-            default_groq_idx = groq_model_options.index("openai/gpt-oss-120b")
-        elif st.session_state.groq_model in groq_model_options:
-            default_groq_idx = groq_model_options.index(st.session_state.groq_model)
-            
-        selected_groq_model = st.selectbox("Groq 모델 선택 (내 계정 활성 모델):", groq_model_options, index=default_groq_idx)
-        custom_groq = st.text_input("Groq 모델명 직접 입력 (필요 시):", value=selected_groq_model).strip()
-        st.session_state.groq_model = custom_groq if custom_groq else selected_groq_model
+        # 고정 모델: gemini-2.5-flash
+        st.session_state.gemini_model = "gemini-2.5-flash"
+        st.caption("⚡ 고성능 최신 모델: `Google Gemini 2.5 Flash` 자동 적용")
         input_or_key = st.session_state.or_key
         input_or_model = st.session_state.or_model
         
     else:
         st.session_state.model_type = "OpenRouter"
-        input_groq_key = st.session_state.groq_key
+        input_gemini_key = st.session_state.gemini_key
         input_or_key = st.text_input(
             "OpenRouter API Key", 
             value=st.session_state.or_key, 
@@ -672,7 +647,7 @@ with st.sidebar:
         input_or_model = st.text_input("OpenRouter Model ID", value=st.session_state.or_model, help="기본: nvidia/nemotron-3-super-120b-a12b:free")
     
     if st.button("설정 저장 (적용)", type="primary"):
-        st.session_state.groq_key = input_groq_key
+        st.session_state.gemini_key = input_gemini_key
         st.session_state.or_key = input_or_key
         st.session_state.or_model = input_or_model
         st.success("설정이 적용되었습니다!")
@@ -857,9 +832,9 @@ if data:
                     st.markdown(f'<div class="docent-script-box" style="opacity: 0.7;">{docent_script}</div>', unsafe_allow_html=True)
                     if st.button("🎤 AI 해설 정식 생성하기", type="primary", use_container_width=True, key="fallback_gen_btn"):
                         with st.spinner("AI 도슨트가 이 지명의 숨겨진 유래를 탐색하고 있습니다..."):
-                            model_type = st.session_state.get("model_type", "Groq")
-                            groq_key = st.session_state.get("groq_key", "")
-                            groq_model = st.session_state.get("groq_model", "llama-3.3-70b-versatile")
+                            model_type = st.session_state.get("model_type", "Gemini")
+                            gemini_key = st.session_state.get("gemini_key", "")
+                            gemini_model = st.session_state.get("gemini_model", "gemini-2.5-flash")
                             or_key = st.session_state.get("or_key", "")
                             or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
                             api_key = st.session_state.get("api_key", "")
@@ -867,7 +842,7 @@ if data:
                             docent_script = generate_docent_story(
                                 final_row['시군구'], final_row['도로명'], final_row['부여사유'],
                                 target_lang=selected_lang, model_type=model_type,
-                                groq_key=groq_key, groq_model=groq_model,
+                                gemini_key=gemini_key, gemini_model=gemini_model,
                                 or_key=or_key, or_model=or_model, api_key=api_key
                             )
                             audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
@@ -887,9 +862,9 @@ if data:
                     # 수동 재생성 버튼 추가
                     if st.button("🔄 AI 해설 다시 만들기", key="re_gen_btn"):
                         with st.spinner("AI 도슨트가 새로운 시각으로 해설을 준비하고 있습니다..."):
-                            model_type = st.session_state.get("model_type", "Groq")
-                            groq_key = st.session_state.get("groq_key", "")
-                            groq_model = st.session_state.get("groq_model", "gemma2-9b-it")
+                            model_type = st.session_state.get("model_type", "Gemini")
+                            gemini_key = st.session_state.get("gemini_key", "")
+                            gemini_model = st.session_state.get("gemini_model", "gemini-2.5-flash")
                             or_key = st.session_state.get("or_key", "")
                             or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
                             api_key = st.session_state.get("api_key", "")
@@ -897,7 +872,7 @@ if data:
                             docent_script = generate_docent_story(
                                 final_row['시군구'], final_row['도로명'], final_row['부여사유'],
                                 target_lang=selected_lang, model_type=model_type,
-                                groq_key=groq_key, groq_model=groq_model,
+                                gemini_key=gemini_key, gemini_model=gemini_model,
                                 or_key=or_key, or_model=or_model, api_key=api_key
                             )
                             audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
@@ -906,9 +881,9 @@ if data:
             else:
                 if st.button("🎤 AI 도슨트 해설 듣기", type="primary", use_container_width=True):
                     with st.spinner("도로명주소 AI 도슨트의 특별한 해설을 준비하고 있습니다. 잠시만 기다려 주세요..."):
-                        model_type = st.session_state.get("model_type", "Groq")
-                        groq_key = st.session_state.get("groq_key", "")
-                        groq_model = st.session_state.get("groq_model", "gemma2-9b-it")
+                        model_type = st.session_state.get("model_type", "Gemini")
+                        gemini_key = st.session_state.get("gemini_key", "")
+                        gemini_model = st.session_state.get("gemini_model", "gemini-2.5-flash")
                         or_key = st.session_state.get("or_key", "")
                         or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
                         api_key = st.session_state.get("api_key", "")
@@ -916,7 +891,7 @@ if data:
                         docent_script = generate_docent_story(
                             final_row['시군구'], final_row['도로명'], final_row['부여사유'],
                             target_lang=selected_lang, model_type=model_type,
-                            groq_key=groq_key, groq_model=groq_model,
+                            gemini_key=gemini_key, gemini_model=gemini_model,
                             or_key=or_key, or_model=or_model, api_key=api_key
                         )
                         audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))

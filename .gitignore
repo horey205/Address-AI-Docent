@@ -15,3 +15,8 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# Temp & local test files
+*.txt
+test_gemini.py
+*.bak
