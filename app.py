@@ -760,9 +760,20 @@ if data:
                 options_map = {f"{row['도로명']} ({row['시군구']})": row for row in results}
                 options_list = list(options_map.keys())
                 
+                # 도감이나 기획시리즈에서 특정 시군구를 지정해 넘어온 경우 해당 옵션을 기본 선택
+                default_idx = 0
+                target_city = st.session_state.get("search_city", "")
+                if target_city:
+                    clean_target_city = target_city.replace(" ", "")
+                    for idx, label in enumerate(options_list):
+                        if clean_target_city in label.replace(" ", ""):
+                            default_idx = idx
+                            break
+                
                 selected_label = st.selectbox(
                     f"'{search_query}' 검색 결과 ({len(results)}건) - 원하는 도로를 선택하세요:",
                     options_list,
+                    index=default_idx,
                     key=f"select_{search_query}"
                 )
                 final_row = options_map[selected_label]
