@@ -312,7 +312,7 @@ def save_docent_cache(city, road, lang, script, audio_path):
     except:
         pass
 
-def generate_docent_story(city, road, reason, target_lang="한국어", model_type="Gemini", gemini_key="", gemini_model="gemini-flash-latest", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free", api_key=""):
+def generate_docent_story(city, road, reason, target_lang="한국어", model_type="Gemini", gemini_key="", gemini_model="gemini-3.8-flash", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free", api_key=""):
     """Google Gemini(1순위 고성능) 또는 OpenRouter를 활용하여 최상의 다국어 도슨트 해설을 생성합니다."""
     lang_name = VOICE_CONFIG.get(target_lang, VOICE_CONFIG["한국어"])["lang_name"]
     # 언어별 설정 (자연스러운 로컬 도슨트 대본)
@@ -520,7 +520,7 @@ if 'gemini_key' not in st.session_state:
 if 'secret_injected' not in st.session_state:
     st.session_state.secret_injected = bool(DEFAULT_GEMINI_KEY)
 if 'gemini_model' not in st.session_state:
-    st.session_state.gemini_model = "gemini-flash-latest"
+    st.session_state.gemini_model = "gemini-3.8-flash"
 if 'or_key' not in st.session_state:
     st.session_state.or_key = os.environ.get("OPENROUTER_API_KEY", "")
 if 'or_model' not in st.session_state:
@@ -641,9 +641,9 @@ with st.sidebar:
         effective_gemini_key = input_gemini_key.strip() if input_gemini_key.strip() else st.session_state.gemini_key
         st.session_state.gemini_key = effective_gemini_key
             
-        # 고정 모델: gemini-flash-latest
-        st.session_state.gemini_model = "gemini-flash-latest"
-        st.caption("⚡ 고성능 최신 모델: `Google Gemini 2.5 Flash` 자동 적용")
+        # 고정 모델: gemini-3.8-flash
+        st.session_state.gemini_model = "gemini-3.8-flash"
+        st.caption("⚡ 고성능 최신 모델: `Google Gemini 3.8 Flash` 자동 적용")
         input_or_key = st.session_state.or_key
         input_or_model = st.session_state.or_model
         
@@ -857,7 +857,7 @@ if data:
                         with st.spinner("AI 도슨트가 이 지명의 숨겨진 유래를 탐색하고 있습니다..."):
                             model_type = st.session_state.get("model_type", "Gemini")
                             gemini_key = st.session_state.get("gemini_key", "")
-                            gemini_model = st.session_state.get("gemini_model", "gemini-flash-latest")
+                            gemini_model = st.session_state.get("gemini_model", "gemini-3.8-flash")
                             or_key = st.session_state.get("or_key", "")
                             or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
                             api_key = st.session_state.get("api_key", "")
@@ -887,7 +887,7 @@ if data:
                         with st.spinner("AI 도슨트가 새로운 시각으로 해설을 준비하고 있습니다..."):
                             model_type = st.session_state.get("model_type", "Gemini")
                             gemini_key = st.session_state.get("gemini_key", "")
-                            gemini_model = st.session_state.get("gemini_model", "gemini-flash-latest")
+                            gemini_model = st.session_state.get("gemini_model", "gemini-3.8-flash")
                             or_key = st.session_state.get("or_key", "")
                             or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
                             api_key = st.session_state.get("api_key", "")
@@ -906,7 +906,7 @@ if data:
                     with st.spinner("도로명주소 AI 도슨트의 특별한 해설을 준비하고 있습니다. 잠시만 기다려 주세요..."):
                         model_type = st.session_state.get("model_type", "Gemini")
                         gemini_key = st.session_state.get("gemini_key", "")
-                        gemini_model = st.session_state.get("gemini_model", "gemini-flash-latest")
+                        gemini_model = st.session_state.get("gemini_model", "gemini-3.8-flash")
                         or_key = st.session_state.get("or_key", "")
                         or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
                         api_key = st.session_state.get("api_key", "")
