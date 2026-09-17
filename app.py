@@ -534,7 +534,7 @@ if 'is_from_button' not in st.session_state:
 
 # 단축키(Ctrl+Alt+K) 또는 URL 파라미터 감지 시 Gemini Key 자동 주입
 if st.query_params.get("secret") == "docent":
-    parts = ["AIzaSyCs", "J5D3Tb", "Nhem94", "3LUQ8_V", "O2clzM", "7lxnT4"]
+    parts = ["AIzaSy", "AItdbA", "m7QM0C", "Tn73HZ", "2GVF-f", "WX_82L", "hqo"]
     st.session_state.gemini_key = DEFAULT_GEMINI_KEY if DEFAULT_GEMINI_KEY else "".join(parts)
     st.session_state.model_type = "Gemini"
     st.session_state.secret_injected = True
