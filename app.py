@@ -157,8 +157,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 JSON_FILE = os.path.join(BASE_DIR, 'road_names.json')
 ENV_FILE = os.path.join(BASE_DIR, '.env')
 
-def load_env_key():
-    """ .env 파일에서 Gemini API 키 읽기 (key2 우선, 없으면 key/GEMINI_API_KEY) """
+def load_env_keys():
+    """ .env 파일에서 Gemini 및 Upstage API 키 읽기 """
+    gemini_key = ""
+    upstage_key = ""
     if os.path.exists(ENV_FILE):
         try:
             keys = {}
@@ -167,18 +169,22 @@ def load_env_key():
                     line = line.strip()
                     if '=' in line:
                         k, v = line.split('=', 1)
-                        keys[k.strip()] = v.strip()
-            if 'key2' in keys and keys['key2']:
-                return keys['key2']
-            if 'GEMINI_API_KEY' in keys and keys['GEMINI_API_KEY']:
-                return keys['GEMINI_API_KEY']
-            if 'key' in keys and keys['key']:
-                return keys['key']
+                        keys[k.strip().lower()] = v.strip()
+            # Gemini Key
+            for gk in ['gemini key', 'key2', 'gemini_api_key', 'key']:
+                if gk in keys and keys[gk]:
+                    gemini_key = keys[gk]
+                    break
+            # Upstage Key
+            for uk in ['upstage key', 'upstage_api_key', 'upstage', 'solar_api_key']:
+                if uk in keys and keys[uk]:
+                    upstage_key = keys[uk]
+                    break
         except:
             pass
-    return ""
+    return gemini_key, upstage_key
 
-DEFAULT_GEMINI_KEY = load_env_key()
+DEFAULT_GEMINI_KEY, DEFAULT_UPSTAGE_KEY = load_env_keys()
 
 @st.cache_data
 def load_data():
@@ -312,8 +318,8 @@ def save_docent_cache(city, road, lang, script, audio_path):
     except:
         pass
 
-def generate_docent_story(city, road, reason, target_lang="한국어", model_type="Gemini", gemini_key="", gemini_model="gemini-3.8-flash", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free", api_key=""):
-    """Google Gemini(1순위 고성능) 또는 OpenRouter를 활용하여 최상의 다국어 도슨트 해설을 생성합니다."""
+def generate_docent_story(city, road, reason, target_lang="한국어", model_type="Upstage", gemini_key="", gemini_model="gemini-3.8-flash", upstage_key="", upstage_model="solar-pro4-260806", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free", api_key=""):
+    """Upstage Solar, Google Gemini 또는 OpenRouter를 활용하여 최상의 다국어 도슨트 해설을 생성합니다."""
     lang_name = VOICE_CONFIG.get(target_lang, VOICE_CONFIG["한국어"])["lang_name"]
     # 언어별 설정 (자연스러운 로컬 도슨트 대본)
     lang_prompts = {
@@ -360,13 +366,44 @@ Based on the location ({city}), road name ({road}), and origin ({reason}), creat
 "ようこそ！{road}の由来と歴史をご紹介する「道路名AIドーセント」です。"
 2. 全文を自然で美しい日本語で作成してください。
 3. 地名の由来や歴史の息吹、街の温もりを感じられる3〜4段落の豊かな構成にしてください。
-4. 思考プロセスや文字数カウントなどの余計なメモは一切省き、純粋な朗読原稿のみを出力してください。"""
+4. 思考プロセスや文字数カウント 등의 余計なメモは一切省き、純粋な朗読原稿のみを出力してください。"""
     }
 
     selected_prompt = lang_prompts.get(lang_name, lang_prompts["Korean"])
 
-    # 1. Google Gemini 호출 (1순위 고성능 공식 AI)
-    if model_type == "Gemini":
+    # 1. Upstage Solar 호출 (업스테이지 한국어 특화 LLM)
+    if model_type == "Upstage":
+        active_key = upstage_key.strip() if upstage_key else DEFAULT_UPSTAGE_KEY
+        if not active_key:
+            return "⚠️ Upstage API 키가 설정되지 않았습니다. 좌측 사이드바 설정에 등록해 주세요. (발급: console.upstage.ai)"
+        try:
+            url = "https://api.upstage.ai/v1/solar/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {active_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": upstage_model if upstage_model else "solar-pro4-260806",
+                "messages": [
+                    {"role": "user", "content": selected_prompt}
+                ],
+                "temperature": 0.3
+            }
+            resp = requests.post(url, json=payload, headers=headers, timeout=40)
+            if resp.status_code == 200:
+                result = resp.json()
+                raw_text = result['choices'][0]['message']['content'].strip()
+                import re
+                cleaned = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL).strip()
+                cleaned = re.sub(r'\s*\(\d{1,4}\)', '', cleaned).strip()
+                return cleaned if cleaned else raw_text
+            else:
+                return f"Upstage API 오류 ({resp.status_code}): {resp.text}"
+        except Exception as e:
+            return f"Upstage 연결 실패: {str(e)}"
+
+    # 2. Google Gemini 호출 (공식 AI)
+    elif model_type == "Gemini":
         active_key = gemini_key.strip() if gemini_key else DEFAULT_GEMINI_KEY
         if not active_key:
             return "⚠️ Gemini API 키가 설정되지 않았습니다. 좌측 사이드바 설정에 등록해 주세요. (무료 발급: aistudio.google.com)"
@@ -404,7 +441,7 @@ Based on the location ({city}), road name ({road}), and origin ({reason}), creat
         except Exception as e:
             return f"Gemini 연결 실패: {str(e)}"
 
-    # 2. OpenRouter 호출 (2순위 오픈소스 모델)
+    # 3. OpenRouter 호출 (2순위 오픈소스 모델)
     elif model_type == "OpenRouter":
         if not or_key:
             return "⚠️ OpenRouter API 키가 설정되지 않았습니다. 좌측 사이드바 설정에 등록해 주세요. (openrouter.ai)"
@@ -514,11 +551,15 @@ CURATIONS = {
 
 # 사이드바 설정
 if 'model_type' not in st.session_state:
-    st.session_state.model_type = "Gemini"
+    st.session_state.model_type = "Upstage"
+if 'upstage_key' not in st.session_state:
+    st.session_state.upstage_key = DEFAULT_UPSTAGE_KEY
+if 'upstage_model' not in st.session_state:
+    st.session_state.upstage_model = "solar-pro4-260806"
 if 'gemini_key' not in st.session_state:
     st.session_state.gemini_key = DEFAULT_GEMINI_KEY
 if 'secret_injected' not in st.session_state:
-    st.session_state.secret_injected = bool(DEFAULT_GEMINI_KEY)
+    st.session_state.secret_injected = bool(DEFAULT_UPSTAGE_KEY)
 if 'gemini_model' not in st.session_state:
     st.session_state.gemini_model = "gemini-3.8-flash"
 if 'or_key' not in st.session_state:
@@ -532,11 +573,10 @@ if 'search_city' not in st.session_state:
 if 'is_from_button' not in st.session_state:
     st.session_state.is_from_button = False
 
-# 단축키(Ctrl+Alt+K) 또는 URL 파라미터 감지 시 Gemini Key 자동 주입
+# 단축키(Ctrl+Alt+K) 또는 URL 파라미터 감지 시 Upstage Solar Key 자동 주입
 if st.query_params.get("secret") == "docent":
-    parts = ["AIzaSy", "AItdbA", "m7QM0C", "Tn73HZ", "2GVF-f", "WX_82L", "hqo"]
-    st.session_state.gemini_key = DEFAULT_GEMINI_KEY if DEFAULT_GEMINI_KEY else "".join(parts)
-    st.session_state.model_type = "Gemini"
+    st.session_state.upstage_key = DEFAULT_UPSTAGE_KEY if DEFAULT_UPSTAGE_KEY else "up_mtBUIoxXvHSonQ2kuZekDtERvKaSs"
+    st.session_state.model_type = "Upstage"
     st.session_state.secret_injected = True
     st.query_params.clear()
     st.rerun()
@@ -597,7 +637,7 @@ with st.sidebar:
     
     st.divider()
     
-    # 사이드바 제목 (⚙️ 클릭 시 숨은 Gemini Key 자동 입력, 현재 창에서 바로 적용)
+    # 사이드바 제목 (⚙️ 클릭 시 숨은 Upstage Key 자동 입력, 현재 창에서 바로 적용)
     st.markdown("""
         <h2 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 6px;">
             <a href="?secret=docent" target="_self" style="text-decoration: none; cursor: default; user-select: none;">⚙️</a>
@@ -605,14 +645,49 @@ with st.sidebar:
         </h2>
     """, unsafe_allow_html=True)
     
-    # AI 모델 옵션 (Gemini 기본)
+    # AI 모델 옵션 (Upstage Solar 기본)
     model_choice = st.radio(
         "사용할 AI 엔진 선택:", 
-        ["🌟 Google Gemini (공식 AI)", "🌐 OpenRouter (오픈소스 무료 AI)"],
-        index=0
+        ["🚀 Upstage Solar (Solar 4)", "🌟 Google Gemini (공식 AI)", "🌐 OpenRouter (오픈소스 무료 AI)"],
+        index=0 if st.session_state.model_type == "Upstage" else (1 if st.session_state.model_type == "Gemini" else 2)
     )
     
-    if "Gemini" in model_choice:
+    if "Upstage" in model_choice:
+        st.session_state.model_type = "Upstage"
+        
+        # 키 입력 위젯
+        if "user_custom_upstage_key" not in st.session_state:
+            st.session_state.user_custom_upstage_key = ""
+
+        def on_custom_upstage_key_change():
+            typed = st.session_state.user_custom_upstage_key.strip()
+            if typed:
+                st.session_state.upstage_key = typed
+                st.session_state.secret_injected = False
+
+        is_secret_mode = st.session_state.get("secret_injected", False) or bool(st.session_state.get("upstage_key"))
+
+        input_upstage_key = st.text_input(
+            "Upstage API Key", 
+            key="user_custom_upstage_key",
+            type="default", 
+            value=st.session_state.user_custom_upstage_key,
+            on_change=on_custom_upstage_key_change,
+            placeholder="******" if is_secret_mode else "API 키를 입력하세요",
+            help="console.upstage.ai 에서 발급받을 수 있습니다."
+        )
+        
+        # 실제 API 호출에 사용될 키 결정
+        effective_upstage_key = input_upstage_key.strip() if input_upstage_key.strip() else st.session_state.upstage_key
+        st.session_state.upstage_key = effective_upstage_key
+            
+        st.session_state.upstage_model = "solar-pro4-260806"
+        st.caption("⚡ 고성능 최신 모델: `Upstage Solar 4 (solar-pro4-260806)` 자동 적용")
+        input_gemini_key = st.session_state.gemini_key
+        input_or_key = st.session_state.or_key
+        input_or_model = st.session_state.or_model
+
+    elif "Gemini" in model_choice:
         st.session_state.model_type = "Gemini"
         
         # 키 입력 위젯
@@ -623,9 +698,8 @@ with st.sidebar:
             typed = st.session_state.user_custom_key.strip()
             if typed:
                 st.session_state.gemini_key = typed
-                st.session_state.secret_injected = False
 
-        is_secret_mode = st.session_state.get("secret_injected", False) or bool(st.session_state.get("gemini_key"))
+        is_gemini_secret_mode = bool(st.session_state.get("gemini_key"))
 
         input_gemini_key = st.text_input(
             "Google Gemini API Key", 
@@ -633,22 +707,22 @@ with st.sidebar:
             type="default", 
             value=st.session_state.user_custom_key,
             on_change=on_custom_key_change,
-            placeholder="******" if is_secret_mode else "API 키를 입력하세요",
+            placeholder="******" if is_gemini_secret_mode else "API 키를 입력하세요",
             help="aistudio.google.com 에서 무료로 발급받을 수 있습니다."
         )
         
-        # 실제 API 호출에 사용될 키 결정
         effective_gemini_key = input_gemini_key.strip() if input_gemini_key.strip() else st.session_state.gemini_key
         st.session_state.gemini_key = effective_gemini_key
             
-        # 고정 모델: gemini-3.8-flash
         st.session_state.gemini_model = "gemini-3.8-flash"
-        st.caption("⚡ 고성능 최신 모델: `Google Gemini 3.8 Flash` 자동 적용")
+        st.caption("⚡ 최신 모델: `Google Gemini 3.8 Flash` 자동 적용")
+        input_upstage_key = st.session_state.upstage_key
         input_or_key = st.session_state.or_key
         input_or_model = st.session_state.or_model
         
     else:
         st.session_state.model_type = "OpenRouter"
+        input_upstage_key = st.session_state.upstage_key
         input_gemini_key = st.session_state.gemini_key
         input_or_key = st.text_input(
             "OpenRouter API Key", 
@@ -659,6 +733,7 @@ with st.sidebar:
         input_or_model = st.text_input("OpenRouter Model ID", value=st.session_state.or_model, help="기본: nvidia/nemotron-3-super-120b-a12b:free")
     
     if st.button("설정 저장 (적용)", type="primary"):
+        st.session_state.upstage_key = input_upstage_key
         st.session_state.gemini_key = input_gemini_key
         st.session_state.or_key = input_or_key
         st.session_state.or_model = input_or_model
@@ -855,7 +930,9 @@ if data:
                     st.markdown(f'<div class="docent-script-box" style="opacity: 0.7;">{docent_script}</div>', unsafe_allow_html=True)
                     if st.button("🎤 AI 해설 정식 생성하기", type="primary", use_container_width=True, key="fallback_gen_btn"):
                         with st.spinner("AI 도슨트가 이 지명의 숨겨진 유래를 탐색하고 있습니다..."):
-                            model_type = st.session_state.get("model_type", "Gemini")
+                            model_type = st.session_state.get("model_type", "Upstage")
+                            upstage_key = st.session_state.get("upstage_key", "")
+                            upstage_model = st.session_state.get("upstage_model", "solar-pro4-260806")
                             gemini_key = st.session_state.get("gemini_key", "")
                             gemini_model = st.session_state.get("gemini_model", "gemini-3.8-flash")
                             or_key = st.session_state.get("or_key", "")
@@ -866,6 +943,7 @@ if data:
                                 final_row['시군구'], final_row['도로명'], final_row['부여사유'],
                                 target_lang=selected_lang, model_type=model_type,
                                 gemini_key=gemini_key, gemini_model=gemini_model,
+                                upstage_key=upstage_key, upstage_model=upstage_model,
                                 or_key=or_key, or_model=or_model, api_key=api_key
                             )
                             audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
@@ -885,7 +963,9 @@ if data:
                     # 수동 재생성 버튼 추가
                     if st.button("🔄 AI 해설 다시 만들기", key="re_gen_btn"):
                         with st.spinner("AI 도슨트가 새로운 시각으로 해설을 준비하고 있습니다..."):
-                            model_type = st.session_state.get("model_type", "Gemini")
+                            model_type = st.session_state.get("model_type", "Upstage")
+                            upstage_key = st.session_state.get("upstage_key", "")
+                            upstage_model = st.session_state.get("upstage_model", "solar-pro4-260806")
                             gemini_key = st.session_state.get("gemini_key", "")
                             gemini_model = st.session_state.get("gemini_model", "gemini-3.8-flash")
                             or_key = st.session_state.get("or_key", "")
@@ -896,6 +976,7 @@ if data:
                                 final_row['시군구'], final_row['도로명'], final_row['부여사유'],
                                 target_lang=selected_lang, model_type=model_type,
                                 gemini_key=gemini_key, gemini_model=gemini_model,
+                                upstage_key=upstage_key, upstage_model=upstage_model,
                                 or_key=or_key, or_model=or_model, api_key=api_key
                             )
                             audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
@@ -904,7 +985,9 @@ if data:
             else:
                 if st.button("🎤 AI 도슨트 해설 듣기", type="primary", use_container_width=True):
                     with st.spinner("도로명주소 AI 도슨트의 특별한 해설을 준비하고 있습니다. 잠시만 기다려 주세요..."):
-                        model_type = st.session_state.get("model_type", "Gemini")
+                        model_type = st.session_state.get("model_type", "Upstage")
+                        upstage_key = st.session_state.get("upstage_key", "")
+                        upstage_model = st.session_state.get("upstage_model", "solar-pro4-260806")
                         gemini_key = st.session_state.get("gemini_key", "")
                         gemini_model = st.session_state.get("gemini_model", "gemini-3.8-flash")
                         or_key = st.session_state.get("or_key", "")
@@ -915,6 +998,7 @@ if data:
                             final_row['시군구'], final_row['도로명'], final_row['부여사유'],
                             target_lang=selected_lang, model_type=model_type,
                             gemini_key=gemini_key, gemini_model=gemini_model,
+                            upstage_key=upstage_key, upstage_model=upstage_model,
                             or_key=or_key, or_model=or_model, api_key=api_key
                         )
                         audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
