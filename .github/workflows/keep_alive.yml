@@ -2,31 +2,60 @@ name: Keep Streamlit Alive
 
 on:
   schedule:
-    # 30분마다 자동 접속 (UTC 기준) -> Streamlit Cloud 수면 방지
-    - cron: '*/30 * * * *'
+    # 20분마다 가상 브라우저로 접속 (UTC 기준)
+    - cron: '*/20 * * * *'
   workflow_dispatch: # GitHub Actions 탭에서 수동 실행 가능
 
 jobs:
-  ping:
+  wake_up:
     runs-on: ubuntu-latest
     steps:
-      - name: Wakeup & Keep Alive Streamlit App
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Playwright & Chromium
+        run: |
+          pip install playwright
+          playwright install chromium --with-deps
+
+      - name: Visit and Click Wake-up Button
         run: |
           python -c "
-          import urllib.request
+          from playwright.sync_api import sync_playwright
           import time
-          
-          url = 'https://juso-ai-docent.streamlit.app/?ping=' + str(int(time.time()))
-          headers = {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-              'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
-          }
-          req = urllib.request.Request(url, headers=headers)
-          try:
-              with urllib.request.urlopen(req, timeout=30) as res:
-                  print(f'✅ Wakeup Success! HTTP Status: {res.getcode()}')
-          except Exception as e:
-              print(f'⚠️ Wakeup Ping Result: {e}')
-          "
 
+          target_url = 'https://juso-ai-docent.streamlit.app'
+          print(f'🚀 Connecting to {target_url} using Playwright Chromium...')
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              context = browser.new_context(
+                  user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                  viewport={'width': 1280, 'height': 800}
+              )
+              page = context.new_page()
+
+              try:
+                  # 페이지 로드 및 리다이렉트 대기
+                  response = page.goto(target_url, wait_until='networkidle', timeout=60000)
+                  time.sleep(5)
+                  print(f'📄 Page loaded! Final URL: {page.url}')
+
+                  # 1. 수면 모드 버튼 탐색 및 클릭
+                  # Streamlit 수면 버튼 대표 문구: 'Yes, get this app back up', 'Wake up' 등
+                  wake_buttons = page.locator('button:has-text(\"Yes, get this app back up\"), button:has-text(\"Wake\")')
+                  if wake_buttons.count() > 0:
+                      print('💤 Sleeping screen detected! Clicking wake-up button...')
+                      wake_buttons.first.click()
+                      time.sleep(10)
+                      print('✅ Wake-up button clicked successfully!')
+                  else:
+                      print('✨ App is already awake and running smoothly.')
+
+              except Exception as e:
+                  print(f'⚠️ Error during wake-up sequence: {e}')
+              finally:
+                  browser.close()
+          "
