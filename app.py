@@ -747,32 +747,13 @@ with st.sidebar:
             type="password", 
             help="openrouter.ai 에서 발급받은 키를 입력하세요."
         )
-    st.markdown("---")
-    st.markdown("#### 📧 이메일 발송 계정 (Gmail SMTP)")
-    _cur_id = st.session_state.get("sender_email") or DEFAULT_GMAIL_ID
-    _cur_pw = st.session_state.get("sender_password") or DEFAULT_GMAIL_SMTP
-    
-    input_sender_email = st.text_input(
-        "발신용 Gmail 주소",
-        value=_cur_id,
-        placeholder="your_service@gmail.com",
-        help="발신자로 사용할 Gmail 주소를 입력하세요."
-    )
-    input_sender_pw = st.text_input(
-        "Gmail 16자리 앱 비밀번호",
-        value=_cur_pw,
-        type="password",
-        placeholder="16자리 앱 비밀번호",
-        help="구글 계정 보안 설정에서 발급받은 16자리 앱 비밀번호입니다."
-    )
+        input_or_model = st.text_input("OpenRouter Model ID", value=st.session_state.or_model, help="기본: nvidia/nemotron-3-super-120b-a12b:free")
 
     if st.button("설정 저장 (적용)", type="primary"):
         st.session_state.upstage_key = input_upstage_key
         st.session_state.gemini_key = input_gemini_key
         st.session_state.or_key = input_or_key
         st.session_state.or_model = input_or_model
-        st.session_state.sender_email = input_sender_email.strip()
-        st.session_state.sender_password = input_sender_pw.strip()
         st.success("설정이 적용되었습니다!")
         st.rerun()
 
