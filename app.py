@@ -9,6 +9,8 @@ import base64
 import uuid
 import requests
 import time
+import re
+from mailer import send_address_docent_email
 # 페이지 설정
 st.set_page_config(page_title="주소 AI 도슨트", page_icon="🎙️", layout="centered")
 
@@ -158,33 +160,44 @@ JSON_FILE = os.path.join(BASE_DIR, 'road_names.json')
 ENV_FILE = os.path.join(BASE_DIR, '.env')
 
 def load_env_keys():
-    """ .env 파일에서 Gemini 및 Upstage API 키 읽기 """
+    """ .env 파일에서 Gemini, Upstage 및 Gmail SMTP 설정 읽기 """
     gemini_key = ""
     upstage_key = ""
-    if os.path.exists(ENV_FILE):
-        try:
-            keys = {}
-            with open(ENV_FILE, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    if '=' in line:
-                        k, v = line.split('=', 1)
-                        keys[k.strip().lower()] = v.strip()
-            # Gemini Key
-            for gk in ['gemini key', 'key2', 'gemini_api_key', 'key']:
-                if gk in keys and keys[gk]:
-                    gemini_key = keys[gk]
-                    break
-            # Upstage Key
-            for uk in ['upstage key', 'upstage_api_key', 'upstage', 'solar_api_key']:
-                if uk in keys and keys[uk]:
-                    upstage_key = keys[uk]
-                    break
-        except:
-            pass
-    return gemini_key, upstage_key
+    gmail_id = ""
+    gmail_smtp = ""
+    
+    target_files = [ENV_FILE, os.path.join(BASE_DIR, 'upstages', '.env')]
+    for ef in target_files:
+        if os.path.exists(ef):
+            try:
+                keys = {}
+                with open(ef, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if '=' in line:
+                            k, v = line.split('=', 1)
+                            keys[k.strip().lower()] = v.strip()
+                # Gemini Key
+                for gk in ['gemini key', 'key2', 'gemini_api_key', 'key']:
+                    if gk in keys and keys[gk] and not gemini_key:
+                        gemini_key = keys[gk]
+                # Upstage Key
+                for uk in ['upstage key', 'upstage_api_key', 'upstage', 'solar_api_key']:
+                    if uk in keys and keys[uk] and not upstage_key:
+                        upstage_key = keys[uk]
+                # Gmail ID
+                for gid in ['gmail id', 'gmail_id', 'sender_email']:
+                    if gid in keys and keys[gid] and not gmail_id:
+                        gmail_id = keys[gid]
+                # Gmail SMTP / Password
+                for gpw in ['gmail smtp', 'gmail_smtp', 'sender_password', 'smtp_password']:
+                    if gpw in keys and keys[gpw] and not gmail_smtp:
+                        gmail_smtp = keys[gpw]
+            except:
+                pass
+    return gemini_key, upstage_key, gmail_id, gmail_smtp
 
-DEFAULT_GEMINI_KEY, DEFAULT_UPSTAGE_KEY = load_env_keys()
+DEFAULT_GEMINI_KEY, DEFAULT_UPSTAGE_KEY, DEFAULT_GMAIL_ID, DEFAULT_GMAIL_SMTP = load_env_keys()
 
 @st.cache_data
 def load_data():
@@ -572,6 +585,10 @@ if 'search_city' not in st.session_state:
     st.session_state.search_city = ""
 if 'is_from_button' not in st.session_state:
     st.session_state.is_from_button = False
+if 'sender_email' not in st.session_state:
+    st.session_state.sender_email = DEFAULT_GMAIL_ID
+if 'sender_password' not in st.session_state:
+    st.session_state.sender_password = DEFAULT_GMAIL_SMTP
 
 # 단축키(Ctrl+Alt+K) 또는 URL 파라미터 감지 시 Upstage Solar Key 자동 주입
 if st.query_params.get("secret") == "docent":
@@ -1006,6 +1023,87 @@ if data:
                         st.info("✨ 새로운 해설이 생성 및 도감에 저장되었습니다.")
                         st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
                         st.audio(audio_file)
+
+            # ---------------------------------------------------------
+            # 📬 이메일로 해설 카드 받기 (체험용 이메일 발송 섹션)
+            # ---------------------------------------------------------
+            active_script = None
+            if cached and not is_fallback:
+                active_script = cached[0]
+            elif 'docent_script' in locals() and docent_script and "오류" not in docent_script and "⚠️" not in docent_script:
+                active_script = docent_script
+
+            if active_script:
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("### 📬 해설 결과 내 메일로 받아보기")
+                st.caption("💌 도로명 유래와 AI 도슨트 오디오 스크립트가 담긴 예쁜 리포트 카드를 이메일로 전송해 드립니다.")
+
+                # 빠른 도메인 입력 버튼
+                col_d1, col_d2, col_d3 = st.columns(3)
+                if "target_user_email" not in st.session_state:
+                    st.session_state.target_user_email = ""
+
+                email_input = st.text_input(
+                    "수신할 이메일 주소",
+                    value=st.session_state.target_user_email,
+                    key="input_user_email_box",
+                    placeholder="example@naver.com",
+                    help="도로명 도슨트 리포트 카드를 받을 이메일 주소를 입력하세요."
+                )
+
+                # 도메인 간편 추가 칩 버튼
+                domain_cols = st.columns(4)
+                with domain_cols[0]:
+                    if st.button("@naver.com", key="chip_naver", use_container_width=True):
+                        prefix = email_input.split('@')[0] if '@' in email_input else email_input
+                        st.session_state.target_user_email = f"{prefix}@naver.com"
+                        st.rerun()
+                with domain_cols[1]:
+                    if st.button("@gmail.com", key="chip_gmail", use_container_width=True):
+                        prefix = email_input.split('@')[0] if '@' in email_input else email_input
+                        st.session_state.target_user_email = f"{prefix}@gmail.com"
+                        st.rerun()
+                with domain_cols[2]:
+                    if st.button("@kakao.com", key="chip_kakao", use_container_width=True):
+                        prefix = email_input.split('@')[0] if '@' in email_input else email_input
+                        st.session_state.target_user_email = f"{prefix}@kakao.com"
+                        st.rerun()
+                with domain_cols[3]:
+                    if st.button("@shingu.ac.kr", key="chip_school", use_container_width=True):
+                        prefix = email_input.split('@')[0] if '@' in email_input else email_input
+                        st.session_state.target_user_email = f"{prefix}@shingu.ac.kr"
+                        st.rerun()
+
+                st.caption("🔒 *입력하신 이메일은 발송 즉시 파기되며 서버에 저장되지 않습니다.*")
+
+                if st.button("📤 내 메일로 도슨트 카드 전송하기", type="primary", use_container_width=True, key="send_email_btn"):
+                    target_email = email_input.strip()
+                    email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+                    
+                    if not target_email or not re.match(email_regex, target_email):
+                        st.warning("⚠️ 올바른 이메일 주소 형식을 입력해 주세요 (예: user@naver.com)")
+                    else:
+                        sender_id = st.session_state.get("sender_email", DEFAULT_GMAIL_ID)
+                        sender_pw = st.session_state.get("sender_password", DEFAULT_GMAIL_SMTP)
+                        
+                        if not sender_id or not sender_pw:
+                            st.error("⚠️ 발신용 Gmail SMTP 설정이 누락되었습니다. (.env 파일을 확인해 주세요)")
+                        else:
+                            with st.spinner("📨 도슨트 카드를 메일함으로 전송하고 있습니다..."):
+                                success, msg = send_address_docent_email(
+                                    receiver_email=target_email,
+                                    city=final_row['시군구'],
+                                    road_name=final_row['도로명'],
+                                    origin_reason=final_row['부여사유'],
+                                    explanation=active_script,
+                                    sender_email=sender_id,
+                                    sender_password=sender_pw
+                                )
+                                if success:
+                                    st.success(f"🎉 '{target_email}' 주소로 도슨트 카드가 성공적으로 발송되었습니다!")
+                                    st.info("💡 메일이 보이지 않는 경우 스팸 메일함 또는 프로모션함을 확인해 주세요.")
+                                else:
+                                    st.error(f"❌ 메일 발송 실패: {msg}")
         else:
             st.warning(f"⚠️ '{search_query}'에 해당하는 도로명 정보를 찾을 수 없습니다. 도로명을 다시 확인해 주세요.")
     
