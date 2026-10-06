@@ -747,13 +747,32 @@ with st.sidebar:
             type="password", 
             help="openrouter.ai 에서 발급받은 키를 입력하세요."
         )
-        input_or_model = st.text_input("OpenRouter Model ID", value=st.session_state.or_model, help="기본: nvidia/nemotron-3-super-120b-a12b:free")
+    st.markdown("---")
+    st.markdown("#### 📧 이메일 발송 계정 (Gmail SMTP)")
+    _cur_id = st.session_state.get("sender_email") or DEFAULT_GMAIL_ID
+    _cur_pw = st.session_state.get("sender_password") or DEFAULT_GMAIL_SMTP
     
+    input_sender_email = st.text_input(
+        "발신용 Gmail 주소",
+        value=_cur_id,
+        placeholder="your_service@gmail.com",
+        help="발신자로 사용할 Gmail 주소를 입력하세요."
+    )
+    input_sender_pw = st.text_input(
+        "Gmail 16자리 앱 비밀번호",
+        value=_cur_pw,
+        type="password",
+        placeholder="16자리 앱 비밀번호",
+        help="구글 계정 보안 설정에서 발급받은 16자리 앱 비밀번호입니다."
+    )
+
     if st.button("설정 저장 (적용)", type="primary"):
         st.session_state.upstage_key = input_upstage_key
         st.session_state.gemini_key = input_gemini_key
         st.session_state.or_key = input_or_key
         st.session_state.or_model = input_or_model
+        st.session_state.sender_email = input_sender_email.strip()
+        st.session_state.sender_password = input_sender_pw.strip()
         st.success("설정이 적용되었습니다!")
         st.rerun()
 
@@ -1083,11 +1102,13 @@ if data:
                     if not target_email or not re.match(email_regex, target_email):
                         st.warning("⚠️ 올바른 이메일 주소 형식을 입력해 주세요 (예: user@naver.com)")
                     else:
-                        sender_id = st.session_state.get("sender_email", DEFAULT_GMAIL_ID)
-                        sender_pw = st.session_state.get("sender_password", DEFAULT_GMAIL_SMTP)
+                        # 발신자 정보 가져오기 (세션 상태 -> env 재검색 -> Streamlit Secrets 순)
+                        _env_gk, _env_uk, _env_gid, _env_gpw = load_env_keys()
+                        sender_id = st.session_state.get("sender_email") or _env_gid or st.secrets.get("GMAIL_ID", "") or st.secrets.get("SENDER_EMAIL", "")
+                        sender_pw = st.session_state.get("sender_password") or _env_gpw or st.secrets.get("GMAIL_SMTP", "") or st.secrets.get("SENDER_PASSWORD", "")
                         
                         if not sender_id or not sender_pw:
-                            st.error("⚠️ 발신용 Gmail SMTP 설정이 누락되었습니다. (.env 파일을 확인해 주세요)")
+                            st.error("⚠️ 발신용 Gmail SMTP 설정이 누락되었습니다. (.env 파일 또는 좌측 사이드바 설정을 확인해 주세요)")
                         else:
                             with st.spinner("📨 도슨트 카드를 메일함으로 전송하고 있습니다..."):
                                 success, msg = send_address_docent_email(
