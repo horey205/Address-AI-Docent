@@ -1051,39 +1051,58 @@ if data:
                     help="이름이나 닉네임을 입력하시면 도슨트 카드에 맞춤 호칭이 인쇄됩니다."
                 )
 
-                if "input_user_email_box" not in st.session_state:
-                    st.session_state["input_user_email_box"] = ""
+                st.markdown("<label style='font-size: 14px; font-weight: bold; color: #2E7D32;'>수신할 이메일 주소</label>", unsafe_allow_html=True)
+                
+                # [아이디] @ [도메인 선택] 2단 분할 레이아웃
+                email_col1, at_col, email_col2 = st.columns([1.2, 0.2, 1.2])
+                
+                with email_col1:
+                    email_id = st.text_input(
+                        "이메일 아이디",
+                        placeholder="아이디 입력 (예: gildong)",
+                        label_visibility="collapsed",
+                        key="email_user_id"
+                    )
+                with at_col:
+                    st.markdown("<div style='text-align: center; font-size: 1.5rem; font-weight: bold; color: #2E7D32; line-height: 2.3em;'>@</div>", unsafe_allow_html=True)
+                with email_col2:
+                    domain_choice = st.selectbox(
+                        "도메인 선택",
+                        options=["naver.com", "gmail.com", "직접입력"],
+                        index=0,
+                        label_visibility="collapsed",
+                        key="email_domain_choice"
+                    )
 
-                email_input = st.text_input(
-                    "수신할 이메일 주소",
-                    key="input_user_email_box",
-                    placeholder="example@naver.com",
-                    help="도로명 도슨트 리포트 카드를 받을 이메일 주소를 입력하세요."
-                )
+                # '직접입력' 선택 시 나타나는 추가 입력창
+                if domain_choice == "직접입력":
+                    custom_domain = st.text_input(
+                        "도메인 직접입력",
+                        placeholder="도메인 입력 (예: kakao.com, daum.net)",
+                        label_visibility="collapsed",
+                        key="email_custom_domain"
+                    )
+                    selected_domain = custom_domain.strip().lstrip("@")
+                else:
+                    selected_domain = domain_choice
 
-                # 도메인 간편 추가 콜백 함수 (위젯 오류 방지)
-                def append_domain(domain):
-                    cur = st.session_state.get("input_user_email_box", "").strip()
-                    prefix = cur.split('@')[0] if '@' in cur else cur
-                    st.session_state["input_user_email_box"] = f"{prefix}@{domain}"
-
-                # 도메인 간편 추가 칩 버튼 (네이버 / 구글 2종 구성)
-                domain_cols = st.columns(2)
-                with domain_cols[0]:
-                    st.button("🟢 @naver.com 추가", key="chip_naver", on_click=append_domain, args=("naver.com",), use_container_width=True)
-                with domain_cols[1]:
-                    st.button("🔴 @gmail.com 추가", key="chip_gmail", on_click=append_domain, args=("gmail.com",), use_container_width=True)
-
-                st.caption("💡 *안정적인 수신을 위해 네이버 또는 구글(Gmail) 개인 메일 주소를 권장합니다.*")
                 st.caption("🔒 *입력하신 정보는 발송 즉시 파기되며 서버에 저장되지 않습니다.*")
 
                 button_label = f"📤 {user_name_input.strip()}님 메일로 도슨트 카드 전송하기" if user_name_input.strip() else "📤 내 메일로 도슨트 카드 전송하기"
                 if st.button(button_label, type="primary", use_container_width=True, key="send_email_btn"):
-                    target_email = email_input.strip()
+                    clean_id = email_id.strip()
+                    clean_dom = selected_domain.strip()
+
+                    # @가 아이디에 포함되어 입력된 경우에도 자동 보정
+                    if "@" in clean_id:
+                        target_email = clean_id
+                    else:
+                        target_email = f"{clean_id}@{clean_dom}" if clean_id and clean_dom else ""
+
                     email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
                     
-                    if not target_email or not re.match(email_regex, target_email):
-                        st.warning("⚠️ 올바른 이메일 주소 형식을 입력해 주세요 (예: user@naver.com)")
+                    if not clean_id or not clean_dom or not re.match(email_regex, target_email):
+                        st.warning("⚠️ 올바른 이메일 아이디와 도메인을 입력해 주세요 (예: hong123 @ naver.com)")
                     else:
                         # 발신자 정보 가져오기 (세션 상태 -> env 재검색 -> Streamlit Secrets 안전 조회)
                         _env_gk, _env_uk, _env_gid, _env_gpw = load_env_keys()
