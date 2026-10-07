@@ -1061,20 +1061,18 @@ if data:
                     help="도로명 도슨트 리포트 카드를 받을 이메일 주소를 입력하세요."
                 )
 
+                # 도메인 간편 추가 콜백 함수 (위젯 오류 방지)
+                def append_domain(domain):
+                    cur = st.session_state.get("input_user_email_box", "").strip()
+                    prefix = cur.split('@')[0] if '@' in cur else cur
+                    st.session_state["input_user_email_box"] = f"{prefix}@{domain}"
+
                 # 도메인 간편 추가 칩 버튼 (네이버 / 구글 2종 구성)
                 domain_cols = st.columns(2)
                 with domain_cols[0]:
-                    if st.button("🟢 @naver.com 추가", key="chip_naver", use_container_width=True):
-                        current_val = st.session_state.get("input_user_email_box", "").strip()
-                        prefix = current_val.split('@')[0] if '@' in current_val else current_val
-                        st.session_state["input_user_email_box"] = f"{prefix}@naver.com"
-                        st.rerun()
+                    st.button("🟢 @naver.com 추가", key="chip_naver", on_click=append_domain, args=("naver.com",), use_container_width=True)
                 with domain_cols[1]:
-                    if st.button("🔴 @gmail.com 추가", key="chip_gmail", use_container_width=True):
-                        current_val = st.session_state.get("input_user_email_box", "").strip()
-                        prefix = current_val.split('@')[0] if '@' in current_val else current_val
-                        st.session_state["input_user_email_box"] = f"{prefix}@gmail.com"
-                        st.rerun()
+                    st.button("🔴 @gmail.com 추가", key="chip_gmail", on_click=append_domain, args=("gmail.com",), use_container_width=True)
 
                 st.caption("💡 *안정적인 수신을 위해 네이버 또는 구글(Gmail) 개인 메일 주소를 권장합니다.*")
                 st.caption("🔒 *입력하신 정보는 발송 즉시 파기되며 서버에 저장되지 않습니다.*")
