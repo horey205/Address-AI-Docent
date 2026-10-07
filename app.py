@@ -1051,45 +1051,32 @@ if data:
                     help="이름이나 닉네임을 입력하시면 도슨트 카드에 맞춤 호칭이 인쇄됩니다."
                 )
 
-                if "target_user_email" not in st.session_state:
-                    st.session_state.target_user_email = ""
+                if "input_user_email_box" not in st.session_state:
+                    st.session_state["input_user_email_box"] = ""
 
                 email_input = st.text_input(
                     "수신할 이메일 주소",
-                    value=st.session_state.target_user_email,
                     key="input_user_email_box",
                     placeholder="example@naver.com",
                     help="도로명 도슨트 리포트 카드를 받을 이메일 주소를 입력하세요."
                 )
 
-                # 도메인 간편 추가 칩 버튼 (자주 쓰는 개인 메일)
-                domain_cols = st.columns(4)
+                # 도메인 간편 추가 칩 버튼 (네이버 / 구글 2종 구성)
+                domain_cols = st.columns(2)
                 with domain_cols[0]:
-                    if st.button("@naver.com", key="chip_naver", use_container_width=True):
-                        prefix = email_input.split('@')[0] if '@' in email_input else email_input
-                        st.session_state.target_user_email = f"{prefix}@naver.com"
-                        st.session_state.target_user_name = user_name_input
+                    if st.button("🟢 @naver.com 추가", key="chip_naver", use_container_width=True):
+                        current_val = st.session_state.get("input_user_email_box", "").strip()
+                        prefix = current_val.split('@')[0] if '@' in current_val else current_val
+                        st.session_state["input_user_email_box"] = f"{prefix}@naver.com"
                         st.rerun()
                 with domain_cols[1]:
-                    if st.button("@gmail.com", key="chip_gmail", use_container_width=True):
-                        prefix = email_input.split('@')[0] if '@' in email_input else email_input
-                        st.session_state.target_user_email = f"{prefix}@gmail.com"
-                        st.session_state.target_user_name = user_name_input
-                        st.rerun()
-                with domain_cols[2]:
-                    if st.button("@kakao.com", key="chip_kakao", use_container_width=True):
-                        prefix = email_input.split('@')[0] if '@' in email_input else email_input
-                        st.session_state.target_user_email = f"{prefix}@kakao.com"
-                        st.session_state.target_user_name = user_name_input
-                        st.rerun()
-                with domain_cols[3]:
-                    if st.button("@daum.net", key="chip_daum", use_container_width=True):
-                        prefix = email_input.split('@')[0] if '@' in email_input else email_input
-                        st.session_state.target_user_email = f"{prefix}@daum.net"
-                        st.session_state.target_user_name = user_name_input
+                    if st.button("🔴 @gmail.com 추가", key="chip_gmail", use_container_width=True):
+                        current_val = st.session_state.get("input_user_email_box", "").strip()
+                        prefix = current_val.split('@')[0] if '@' in current_val else current_val
+                        st.session_state["input_user_email_box"] = f"{prefix}@gmail.com"
                         st.rerun()
 
-                st.caption("💡 *학교 웹메일(@ac.kr)은 보안 방화벽으로 차단될 수 있으니 네이버/구글 등 개인 메일 입력을 권장합니다.*")
+                st.caption("💡 *안정적인 수신을 위해 네이버 또는 구글(Gmail) 개인 메일 주소를 권장합니다.*")
                 st.caption("🔒 *입력하신 정보는 발송 즉시 파기되며 서버에 저장되지 않습니다.*")
 
                 button_label = f"📤 {user_name_input.strip()}님 메일로 도슨트 카드 전송하기" if user_name_input.strip() else "📤 내 메일로 도슨트 카드 전송하기"
