@@ -10,7 +10,11 @@ ENV/
 
 # Streamlit
 .streamlit/secrets.toml
-.streamlit/config.toml
+
+# Generated DB
+road_names.db
+*.db-wal
+*.db-shm
 
 # OS
 .DS_Store

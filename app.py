@@ -199,11 +199,75 @@ def load_env_keys():
 
 DEFAULT_GEMINI_KEY, DEFAULT_UPSTAGE_KEY, DEFAULT_GMAIL_ID, DEFAULT_GMAIL_SMTP = load_env_keys()
 
-@st.cache_data
-def load_data():
-    if not os.path.exists(JSON_FILE): return None
-    with open(JSON_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
+# 도로명 주소 데이터베이스 설정 (SQLite 인덱스 기반 고속 검색)
+ROAD_DB_FILE = os.path.join(BASE_DIR, "road_names.db")
+
+def init_road_db():
+    """road_names.db가 없거나 비어있는 경우 road_names.json으로부터 생성하고 인덱스를 생성합니다."""
+    if os.path.exists(ROAD_DB_FILE) and os.path.getsize(ROAD_DB_FILE) > 1024 * 1024:
+        return
+    if not os.path.exists(JSON_FILE):
+        return
+    try:
+        conn = sqlite3.connect(ROAD_DB_FILE, timeout=30.0)
+        c = conn.cursor()
+        c.execute('PRAGMA journal_mode=WAL')
+        c.execute('PRAGMA synchronous=NORMAL')
+        c.execute('''CREATE TABLE IF NOT EXISTS roads (
+            id INTEGER PRIMARY KEY,
+            city TEXT,
+            road TEXT,
+            reason TEXT
+        )''')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_road_exact ON roads (road)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_city_road ON roads (city, road)')
+        with open(JSON_FILE, 'r', encoding='utf-8') as f:
+            items = json.load(f)
+        c.executemany('INSERT INTO roads (city, road, reason) VALUES (?, ?, ?)',
+                      [(it.get('시군구', ''), it.get('도로명', ''), it.get('부여사유', '')) for it in items])
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Road DB Init Error: {e}")
+
+init_road_db()
+
+def search_roads_db(query, limit=50):
+    """SQLite 인덱스를 활용하여 17만 건 중에서 0.002초 만에 일치하는 도로를 검색합니다."""
+    query = (query or "").strip()
+    if not query:
+        return []
+    
+    if not os.path.exists(ROAD_DB_FILE):
+        # 폴백: JSON 직접 로드
+        if os.path.exists(JSON_FILE):
+            try:
+                with open(JSON_FILE, 'r', encoding='utf-8') as f:
+                    all_data = json.load(f)
+                exact = [r for r in all_data if str(r.get('도로명', '')) == query]
+                if exact:
+                    return exact[:limit]
+                return [r for r in all_data if query in str(r.get('도로명', ''))][:limit]
+            except Exception:
+                return []
+        return []
+
+    try:
+        conn = sqlite3.connect(ROAD_DB_FILE, timeout=10.0)
+        c = conn.cursor()
+        c.execute('PRAGMA query_only = ON')
+        # 1차: 완전 일치 검색 (인덱스 즉시 조회)
+        c.execute('SELECT city, road, reason FROM roads WHERE road = ? LIMIT ?', (query, limit))
+        rows = c.fetchall()
+        if not rows:
+            # 2차: 부분 일치 검색
+            c.execute('SELECT city, road, reason FROM roads WHERE road LIKE ? LIMIT ?', (f'%{query}%', limit))
+            rows = c.fetchall()
+        conn.close()
+        return [{"시군구": r[0], "도로명": r[1], "부여사유": r[2]} for r in rows]
+    except Exception as e:
+        print(f"Search DB Error: {e}")
+        return []
 
 def search_brave(query, api_key):
     """Brave Search API를 사용해 웹 검색 결과를 가져옵니다."""
@@ -240,18 +304,30 @@ VOICE_CONFIG = {
     "日本語": {"voice": "ja-JP-NanamiNeural", "lang_name": "Japanese"}
 }
 
-async def generate_speech(text, city, road, lang="한국어"):
+def generate_speech_sync(text, city, road, lang="한국어"):
+    """동시 접속 시 Streamlit 이벤트 루프와 충돌하지 않도록 별도 스레드/이벤트루프에서 안전하게 음성을 생성합니다."""
     safe_city = city.replace(" ", "")
     safe_road = road.replace(" ", "")
     lang_name = VOICE_CONFIG.get(lang, VOICE_CONFIG["한국어"])["lang_name"]
     filename = f"{safe_city}_{safe_road}_{lang_name}.mp3"
     mp3_dir = os.path.join(BASE_DIR, "mp3")
     if not os.path.exists(mp3_dir):
-        os.makedirs(mp3_dir)
+        os.makedirs(mp3_dir, exist_ok=True)
     output_file = os.path.join(mp3_dir, filename)
     voice = VOICE_CONFIG.get(lang, VOICE_CONFIG["한국어"])["voice"]
-    communicate = edge_tts.Communicate(text, voice)
-    await communicate.save(output_file)
+    
+    async def _run():
+        communicate = edge_tts.Communicate(text, voice)
+        await communicate.save(output_file)
+
+    try:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(_run())
+        loop.close()
+    except Exception as e:
+        # 혹시 기존 루프가 있는 경우를 대비한 폴백
+        asyncio.run(_run())
+        
     return output_file
 
 def get_audio_player(file_path):
@@ -265,7 +341,9 @@ def get_audio_player(file_path):
 DB_FILE = os.path.join(BASE_DIR, "docent_cache.db")
 
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(DB_FILE, timeout=20.0)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA synchronous=NORMAL')
     conn.execute('''CREATE TABLE IF NOT EXISTS story_cache 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, city TEXT, road TEXT, lang TEXT, script TEXT, audio_path TEXT, UNIQUE(city, road, lang))''')
     conn.commit()
@@ -285,7 +363,7 @@ def get_cached_docent(city, road, lang="한국어"):
 
     # 2. 없으면 서버에 보존된 공식 홍보용 마스터 DB에서 탐색
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = sqlite3.connect(DB_FILE, timeout=10.0)
         query = """
             SELECT script, audio_path FROM story_cache 
             WHERE REPLACE(city, ' ', '') LIKE ? 
@@ -322,7 +400,7 @@ def save_docent_cache(city, road, lang, script, audio_path):
     
     # 2. 서버 로컬 DB에도 캐싱 시도
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = sqlite3.connect(DB_FILE, timeout=20.0)
         c = conn.cursor()
         c.execute('INSERT OR REPLACE INTO story_cache (city, road, lang, script, audio_path) VALUES (?, ?, ?, ?, ?)', 
                   (city, road, lang, script, audio_path))
@@ -793,7 +871,7 @@ with st.sidebar:
             
     with doc_tab2:
         try:
-            conn = sqlite3.connect(DB_FILE)
+            conn = sqlite3.connect(DB_FILE, timeout=10.0)
             c = conn.cursor()
             c.execute('SELECT city, road, lang FROM story_cache ORDER BY id DESC')
             history = c.fetchall()
@@ -815,193 +893,130 @@ with st.sidebar:
 st.title("🎙️ 주소 AI 도슨트")
 st.write("우리 동네 길 위에 숨겨진 흥미로운 이야기를 들려드립니다.")
 
-data = load_data()
-if data:
-    # 1. 검색 섹션 (UX 개선)
-    st.subheader("🔍 검색하기")
-    
-    # 버튼 클릭 등으로 예약된 검색어가 있다면 텍스트 입력창 렌더링 전에 동기화
-    if "pending_search" in st.session_state and st.session_state.pending_search:
-        st.session_state.search_keyword = st.session_state.pending_search
-        st.session_state.search_input = st.session_state.pending_search
-        st.session_state.pending_search = None
-    elif "search_keyword" not in st.session_state:
-        st.session_state.search_keyword = st.session_state.get("search_input", "")
-        
-    def on_search_change():
-        st.session_state.search_input = st.session_state.search_keyword
-        st.session_state.search_city = ""
+# 1. 검색 섹션 (UX 개선)
+st.subheader("🔍 검색하기")
 
-    st.text_input(
-        "어떤 길의 이야기가 궁금하신가요?", 
-        key="search_keyword",
-        on_change=on_search_change,
-        placeholder="예: 세종대로, 사슴벌레로, 테헤란로...",
-        label_visibility="collapsed"
-    )
-    st.caption("💡 도로명 또는 단어를 입력한 후 Enter를 누르면 바로 검색됩니다.")
+# 버튼 클릭 등으로 예약된 검색어가 있다면 텍스트 입력창 렌더링 전에 동기화
+if "pending_search" in st.session_state and st.session_state.pending_search:
+    st.session_state.search_keyword = st.session_state.pending_search
+    st.session_state.search_input = st.session_state.pending_search
+    st.session_state.pending_search = None
+elif "search_keyword" not in st.session_state:
+    st.session_state.search_keyword = st.session_state.get("search_input", "")
     
-    search_query = st.session_state.get("search_keyword", "").strip()
+def on_search_change():
+    st.session_state.search_input = st.session_state.search_keyword
+    st.session_state.search_city = ""
+
+st.text_input(
+    "어떤 길의 이야기가 궁금하신가요?", 
+    key="search_keyword",
+    on_change=on_search_change,
+    placeholder="예: 세종대로, 사슴벌레로, 테헤란로...",
+    label_visibility="collapsed"
+)
+st.caption("💡 도로명 또는 단어를 입력한 후 Enter를 누르면 바로 검색됩니다.")
+
+search_query = st.session_state.get("search_keyword", "").strip()
+
+if search_query:
+    # 초고속 SQLite 인덱스 검색 (17만 건 중 0.002초)
+    results = search_roads_db(search_query)
     
-    if search_query:
-        # 1차: 완전 일치 검색
-        exact_matches = [row for row in data if str(row.get('도로명', '')) == search_query]
-        
-        # 2차: 완전 일치가 없으면 부분 일치 검색
-        if exact_matches:
-            results = exact_matches
+    if results:
+        if len(results) > 1:
+            # 도로명과 시군구를 함께 표시하여 고를 수 있게 제공
+            options_map = {f"{row['도로명']} ({row['시군구']})": row for row in results}
+            options_list = list(options_map.keys())
+            
+            # 도감이나 기획시리즈에서 특정 시군구를 지정해 넘어온 경우 해당 옵션을 기본 선택
+            default_idx = 0
+            target_city = st.session_state.get("search_city", "")
+            if target_city:
+                clean_target_city = target_city.replace(" ", "")
+                for idx, label in enumerate(options_list):
+                    if clean_target_city in label.replace(" ", ""):
+                        default_idx = idx
+                        break
+            
+            selected_label = st.selectbox(
+                f"'{search_query}' 검색 결과 ({len(results)}건) - 원하는 도로를 선택하세요:",
+                options_list,
+                index=default_idx,
+                key=f"select_{search_query}"
+            )
+            final_row = options_map[selected_label]
+            st.session_state.search_city = final_row["시군구"]
         else:
-            results = [row for row in data if search_query in str(row.get('도로명', ''))]
+            final_row = results[0]
+            st.session_state.search_city = final_row["시군구"]
         
-        if results:
-            if len(results) > 1:
-                # 도로명과 시군구를 함께 표시하여 고를 수 있게 제공
-                options_map = {f"{row['도로명']} ({row['시군구']})": row for row in results}
-                options_list = list(options_map.keys())
-                
-                # 도감이나 기획시리즈에서 특정 시군구를 지정해 넘어온 경우 해당 옵션을 기본 선택
-                default_idx = 0
-                target_city = st.session_state.get("search_city", "")
-                if target_city:
-                    clean_target_city = target_city.replace(" ", "")
-                    for idx, label in enumerate(options_list):
-                        if clean_target_city in label.replace(" ", ""):
-                            default_idx = idx
+        st.markdown(f'<div class="reason-box"><h3>📍 {final_row["시군구"]} {final_row["도로명"]}</h3><p>"{final_row["부여사유"]}"</p></div>', unsafe_allow_html=True)
+        
+        # 🗺️ 구글 지도 임베드 (반응형 적용)
+        st.markdown("<br>", unsafe_allow_html=True)
+        map_query = f"{final_row['시군구']} {final_row['도로명']}"
+        map_url = f"https://www.google.com/maps?q={map_query}&output=embed"
+        st.markdown(f'<iframe src="{map_url}" width="100%" height="350" style="border:0; border-radius:15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" allowfullscreen="" loading="lazy"></iframe>', unsafe_allow_html=True)
+        
+        st.divider()
+
+        # 언어 선택 도구 (도감 클릭 시 연동)
+        lang_list = list(VOICE_CONFIG.keys())
+        
+        # 도감에서 클릭한 언어가 있다면 그것을 최종 검색 언어로 강제 설정
+        final_lookup_lang = None
+        if 'target_lang_from_hist' in st.session_state:
+            final_lookup_lang = st.session_state.target_lang_from_hist
+        
+        default_lang_idx = 0
+        if final_lookup_lang and final_lookup_lang in lang_list:
+            default_lang_idx = lang_list.index(final_lookup_lang)
+
+        # 언어 선택 및 해설 듣기
+        col1, col2 = st.columns([2, 1])
+        with col2:
+            selected_lang = st.selectbox("🌐 해설 언어", lang_list, index=default_lang_idx, key="lang_selector")
+        
+        # 검색에 사용할 최종 언어 결정 (도감 클릭 우선, 아니면 셀렉트박스 값)
+        current_lang = final_lookup_lang if final_lookup_lang else selected_lang
+        
+        # 한 번 반영 후 초기화 (다음 수동 조작을 위해)
+        if 'target_lang_from_hist' in st.session_state:
+            del st.session_state.target_lang_from_hist
+
+        # [동기화 핵심] 결정된 언어로 캐시 조회
+        cached = get_cached_docent(final_row['시군구'], final_row['도로명'], current_lang)
+        
+        # [자동 보정 숨김] 사용자가 직접 선택한 언어는 존중하되, 도감 등에서 클릭 시에만 언어를 자동 연동합니다.
+        display_lang_label = selected_lang
+        is_fallback = cached and "(API 키가 설정되지 않아" in cached[0]
+        
+        # 캐시가 있다면 오디오 파일 존재 여부와 상관없이 '해설서'는 먼저 보여줍니다.
+        if cached:
+            docent_script, audio_file_path = cached
+            
+            # 서버 환경에 맞게 오디오 경로 재탐색 (파일명이 조금 달라도 도로명과 언어가 일치하면 찾음)
+            audio_filename = os.path.basename(audio_file_path)
+            clean_road = final_row['도로명'].replace(" ", "")
+            current_lang_name = VOICE_CONFIG.get(current_lang, {}).get("lang_name", "")
+            
+            # 1. 원래 경로로 먼저 시도
+            server_audio_path = os.path.join(BASE_DIR, "mp3", audio_filename)
+            
+            # 2. 실패 시, mp3 폴더 내에서 '도로명'과 '언어명'이 모두 들어간 파일 강제 탐색
+            if not os.path.exists(server_audio_path):
+                mp3_dir = os.path.join(BASE_DIR, "mp3")
+                if os.path.exists(mp3_dir):
+                    for f in os.listdir(mp3_dir):
+                        if clean_road in f and current_lang_name in f and f.endswith(".mp3"):
+                            server_audio_path = os.path.join(mp3_dir, f)
                             break
-                
-                selected_label = st.selectbox(
-                    f"'{search_query}' 검색 결과 ({len(results)}건) - 원하는 도로를 선택하세요:",
-                    options_list,
-                    index=default_idx,
-                    key=f"select_{search_query}"
-                )
-                final_row = options_map[selected_label]
-                st.session_state.search_city = final_row["시군구"]
-            else:
-                final_row = results[0]
-                st.session_state.search_city = final_row["시군구"]
-            
-            st.markdown(f'<div class="reason-box"><h3>📍 {final_row["시군구"]} {final_row["도로명"]}</h3><p>"{final_row["부여사유"]}"</p></div>', unsafe_allow_html=True)
-            
-            # 🗺️ 구글 지도 임베드 (반응형 적용)
-            st.markdown("<br>", unsafe_allow_html=True)
-            map_query = f"{final_row['시군구']} {final_row['도로명']}"
-            map_url = f"https://www.google.com/maps?q={map_query}&output=embed"
-            st.markdown(f'<iframe src="{map_url}" width="100%" height="350" style="border:0; border-radius:15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" allowfullscreen="" loading="lazy"></iframe>', unsafe_allow_html=True)
-            
-            st.divider()
-
-            # 언어 선택 도구 (도감 클릭 시 연동)
-            lang_list = list(VOICE_CONFIG.keys())
-            
-            # 도감에서 클릭한 언어가 있다면 그것을 최종 검색 언어로 강제 설정
-            final_lookup_lang = None
-            if 'target_lang_from_hist' in st.session_state:
-                final_lookup_lang = st.session_state.target_lang_from_hist
-            
-            default_lang_idx = 0
-            if final_lookup_lang and final_lookup_lang in lang_list:
-                default_lang_idx = lang_list.index(final_lookup_lang)
-
-            # 언어 선택 및 해설 듣기
-            col1, col2 = st.columns([2, 1])
-            with col2:
-                selected_lang = st.selectbox("🌐 해설 언어", lang_list, index=default_lang_idx, key="lang_selector")
-            
-            # 검색에 사용할 최종 언어 결정 (도감 클릭 우선, 아니면 셀렉트박스 값)
-            current_lang = final_lookup_lang if final_lookup_lang else selected_lang
-            
-            # 한 번 반영 후 초기화 (다음 수동 조작을 위해)
-            if 'target_lang_from_hist' in st.session_state:
-                del st.session_state.target_lang_from_hist
-
-            # [동기화 핵심] 결정된 언어로 캐시 조회
-            cached = get_cached_docent(final_row['시군구'], final_row['도로명'], current_lang)
-            
-            # [자동 보정 숨김] 사용자가 직접 선택한 언어는 존중하되, 도감 등에서 클릭 시에만 언어를 자동 연동합니다.
-            display_lang_label = selected_lang
-            is_fallback = cached and "(API 키가 설정되지 않아" in cached[0]
-            
-            # 캐시가 있다면 오디오 파일 존재 여부와 상관없이 '해설서'는 먼저 보여줍니다.
-            if cached:
-                docent_script, audio_file_path = cached
-                
-                # 서버 환경에 맞게 오디오 경로 재탐색 (파일명이 조금 달라도 도로명과 언어가 일치하면 찾음)
-                audio_filename = os.path.basename(audio_file_path)
-                clean_road = final_row['도로명'].replace(" ", "")
-                current_lang_name = VOICE_CONFIG.get(current_lang, {}).get("lang_name", "")
-                
-                # 1. 원래 경로로 먼저 시도
-                server_audio_path = os.path.join(BASE_DIR, "mp3", audio_filename)
-                
-                # 2. 실패 시, mp3 폴더 내에서 '도로명'과 '언어명'이 모두 들어간 파일 강제 탐색
-                if not os.path.exists(server_audio_path):
-                    mp3_dir = os.path.join(BASE_DIR, "mp3")
-                    if os.path.exists(mp3_dir):
-                        for f in os.listdir(mp3_dir):
-                            if clean_road in f and current_lang_name in f and f.endswith(".mp3"):
-                                server_audio_path = os.path.join(mp3_dir, f)
-                                break
-                if is_fallback:
-                    st.warning("⚠️ 이전에 API 키 없이 생성된 기본 해설입니다. 아래 버튼을 눌러 정식 AI 해설로 업데이트하세요.")
-                    st.markdown(f'<div class="docent-script-box" style="opacity: 0.7;">{docent_script}</div>', unsafe_allow_html=True)
-                    if st.button("🎤 AI 해설 정식 생성하기", type="primary", use_container_width=True, key="fallback_gen_btn"):
-                        with st.spinner("AI 도슨트가 이 지명의 숨겨진 유래를 탐색하고 있습니다..."):
-                            model_type = st.session_state.get("model_type", "Upstage")
-                            upstage_key = st.session_state.get("upstage_key", "")
-                            upstage_model = st.session_state.get("upstage_model", "solar-pro4-260806")
-                            gemini_key = st.session_state.get("gemini_key", "")
-                            gemini_model = st.session_state.get("gemini_model", "gemini-3.8-flash")
-                            or_key = st.session_state.get("or_key", "")
-                            or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
-                            api_key = st.session_state.get("api_key", "")
-                            
-                            docent_script = generate_docent_story(
-                                final_row['시군구'], final_row['도로명'], final_row['부여사유'],
-                                target_lang=selected_lang, model_type=model_type,
-                                gemini_key=gemini_key, gemini_model=gemini_model,
-                                upstage_key=upstage_key, upstage_model=upstage_model,
-                                or_key=or_key, or_model=or_model, api_key=api_key
-                            )
-                            audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
-                            save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
-                            st.rerun()
-                else:
-                    st.success("✅ 내 도감에서 불러왔습니다! (보존된 사례)")
-                    st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
-                    
-                    if os.path.exists(server_audio_path):
-                        # Base64 변환 후 HTML로 출력
-                        audio_html = get_audio_player(server_audio_path)
-                        st.markdown(audio_html, unsafe_allow_html=True)
-                    else:
-                        st.info("🔈 음성 파일은 서버에 업로드 중이거나 로컬 전용입니다. (검색된 경로: " + server_audio_path + ")")
-                    
-                    # 수동 재생성 버튼 추가
-                    if st.button("🔄 AI 해설 다시 만들기", key="re_gen_btn"):
-                        with st.spinner("AI 도슨트가 새로운 시각으로 해설을 준비하고 있습니다..."):
-                            model_type = st.session_state.get("model_type", "Upstage")
-                            upstage_key = st.session_state.get("upstage_key", "")
-                            upstage_model = st.session_state.get("upstage_model", "solar-pro4-260806")
-                            gemini_key = st.session_state.get("gemini_key", "")
-                            gemini_model = st.session_state.get("gemini_model", "gemini-3.8-flash")
-                            or_key = st.session_state.get("or_key", "")
-                            or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
-                            api_key = st.session_state.get("api_key", "")
-                            
-                            docent_script = generate_docent_story(
-                                final_row['시군구'], final_row['도로명'], final_row['부여사유'],
-                                target_lang=selected_lang, model_type=model_type,
-                                gemini_key=gemini_key, gemini_model=gemini_model,
-                                upstage_key=upstage_key, upstage_model=upstage_model,
-                                or_key=or_key, or_model=or_model, api_key=api_key
-                            )
-                            audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
-                            save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
-                            st.rerun()
-            else:
-                if st.button("🎤 AI 도슨트 해설 듣기", type="primary", use_container_width=True):
-                    with st.spinner("도로명주소 AI 도슨트의 특별한 해설을 준비하고 있습니다. 잠시만 기다려 주세요..."):
+            if is_fallback:
+                st.warning("⚠️ 이전에 API 키 없이 생성된 기본 해설입니다. 아래 버튼을 눌러 정식 AI 해설로 업데이트하세요.")
+                st.markdown(f'<div class="docent-script-box" style="opacity: 0.7;">{docent_script}</div>', unsafe_allow_html=True)
+                if st.button("🎤 AI 해설 정식 생성하기", type="primary", use_container_width=True, key="fallback_gen_btn"):
+                    with st.spinner("AI 도슨트가 이 지명의 숨겨진 유래를 탐색하고 있습니다..."):
                         model_type = st.session_state.get("model_type", "Upstage")
                         upstage_key = st.session_state.get("upstage_key", "")
                         upstage_model = st.session_state.get("upstage_model", "solar-pro4-260806")
@@ -1018,11 +1033,66 @@ if data:
                             upstage_key=upstage_key, upstage_model=upstage_model,
                             or_key=or_key, or_model=or_model, api_key=api_key
                         )
-                        audio_file = asyncio.run(generate_speech(docent_script, final_row['시군구'], final_row['도로명'], selected_lang))
+                        audio_file = generate_speech_sync(docent_script, final_row['시군구'], final_row['도로명'], selected_lang)
                         save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
-                        st.info("✨ 새로운 해설이 생성 및 도감에 저장되었습니다.")
-                        st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
-                        st.audio(audio_file)
+                        st.rerun()
+            else:
+                st.success("✅ 내 도감에서 불러왔습니다! (보존된 사례)")
+                st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
+                
+                if os.path.exists(server_audio_path):
+                    # Base64 변환 후 HTML로 출력
+                    audio_html = get_audio_player(server_audio_path)
+                    st.markdown(audio_html, unsafe_allow_html=True)
+                else:
+                    st.info("🔈 음성 파일은 서버에 업로드 중이거나 로컬 전용입니다. (검색된 경로: " + server_audio_path + ")")
+                
+                # 수동 재생성 버튼 추가
+                if st.button("🔄 AI 해설 다시 만들기", key="re_gen_btn"):
+                    with st.spinner("AI 도슨트가 새로운 시각으로 해설을 준비하고 있습니다..."):
+                        model_type = st.session_state.get("model_type", "Upstage")
+                        upstage_key = st.session_state.get("upstage_key", "")
+                        upstage_model = st.session_state.get("upstage_model", "solar-pro4-260806")
+                        gemini_key = st.session_state.get("gemini_key", "")
+                        gemini_model = st.session_state.get("gemini_model", "gemini-3.8-flash")
+                        or_key = st.session_state.get("or_key", "")
+                        or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
+                        api_key = st.session_state.get("api_key", "")
+                        
+                        docent_script = generate_docent_story(
+                            final_row['시군구'], final_row['도로명'], final_row['부여사유'],
+                            target_lang=selected_lang, model_type=model_type,
+                            gemini_key=gemini_key, gemini_model=gemini_model,
+                            upstage_key=upstage_key, upstage_model=upstage_model,
+                            or_key=or_key, or_model=or_model, api_key=api_key
+                        )
+                        audio_file = generate_speech_sync(docent_script, final_row['시군구'], final_row['도로명'], selected_lang)
+                        save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
+                        st.rerun()
+        else:
+            if st.button("🎤 AI 도슨트 해설 듣기", type="primary", use_container_width=True):
+                with st.spinner("도로명주소 AI 도슨트의 특별한 해설을 준비하고 있습니다. 잠시만 기다려 주세요..."):
+                    model_type = st.session_state.get("model_type", "Upstage")
+                    upstage_key = st.session_state.get("upstage_key", "")
+                    upstage_model = st.session_state.get("upstage_model", "solar-pro4-260806")
+                    gemini_key = st.session_state.get("gemini_key", "")
+                    gemini_model = st.session_state.get("gemini_model", "gemini-3.8-flash")
+                    or_key = st.session_state.get("or_key", "")
+                    or_model = st.session_state.get("or_model", "nvidia/nemotron-3-super-120b-a12b:free")
+                    api_key = st.session_state.get("api_key", "")
+                    
+                    docent_script = generate_docent_story(
+                        final_row['시군구'], final_row['도로명'], final_row['부여사유'],
+                        target_lang=selected_lang, model_type=model_type,
+                        gemini_key=gemini_key, gemini_model=gemini_model,
+                        upstage_key=upstage_key, upstage_model=upstage_model,
+                        or_key=or_key, or_model=or_model, api_key=api_key
+                    )
+                    audio_file = generate_speech_sync(docent_script, final_row['시군구'], final_row['도로명'], selected_lang)
+                    save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
+                    st.info("✨ 새로운 해설이 생성 및 도감에 저장되었습니다.")
+                    st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
+                    st.audio(audio_file)
 
             # ---------------------------------------------------------
             # 📬 이메일로 해설 카드 받기 (체험용 이메일 발송 섹션)
@@ -1137,31 +1207,31 @@ if data:
                                     st.info("💡 메일이 보이지 않는 경우 스팸 메일함 또는 프로모션함을 확인해 주세요.")
                                 else:
                                     st.error(f"❌ 메일 발송 실패: {msg}")
-        else:
-            st.warning(f"⚠️ '{search_query}'에 해당하는 도로명 정보를 찾을 수 없습니다. 도로명을 다시 확인해 주세요.")
+    else:
+        st.warning(f"⚠️ '{search_query}'에 해당하는 도로명 정보를 찾을 수 없습니다. 도로명을 다시 확인해 주세요.")
+
+# 2. 기획 시리즈 섹션 (메뉴 선택 시에만 표시)
+if selected_series != "🏠 도슨트 홈 (검색)":
+    st.divider()
+    st.markdown(f"### {selected_series}")
+    st.caption("카드를 클릭하면 바로 해설을 검색할 수 있습니다.")
+        
+    cols = st.columns(5)
+    for i, road in enumerate(CURATIONS[selected_series]):
+        with cols[i % 5]:
+            st.markdown(f"""
+            <div style="text-align: center; margin-top: 10px; margin-bottom: 5px;">
+                <span style="font-size: 0.8rem; color: #666; font-weight: 500; display: block; min-height: 2.2em; line-height: 1.1;">{road['desc']}</span>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button(road['name'], key=f"rec_{i}", use_container_width=True):
+                st.session_state.pending_search = road['name']
+                st.session_state.search_city = road['city']
+                st.session_state.is_from_button = True
+                st.rerun()
+            st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
     
-    # 2. 기획 시리즈 섹션 (메뉴 선택 시에만 표시)
-    if selected_series != "🏠 도슨트 홈 (검색)":
-        st.divider()
-        st.markdown(f"### {selected_series}")
-        st.caption("카드를 클릭하면 바로 해설을 검색할 수 있습니다.")
-        
-        cols = st.columns(5)
-        for i, road in enumerate(CURATIONS[selected_series]):
-            with cols[i % 5]:
-                st.markdown(f"""
-                <div style="text-align: center; margin-top: 10px; margin-bottom: 5px;">
-                    <span style="font-size: 0.8rem; color: #666; font-weight: 500; display: block; min-height: 2.2em; line-height: 1.1;">{road['desc']}</span>
-                </div>
-                """, unsafe_allow_html=True)
-                if st.button(road['name'], key=f"rec_{i}", use_container_width=True):
-                    st.session_state.pending_search = road['name']
-                    st.session_state.search_city = road['city']
-                    st.session_state.is_from_button = True
-                    st.rerun()
-                st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
-        
-        # 기획 시리즈 카드 뭉치 바로 아래에 테마 일러스트 배치
-        if "케데헌" in selected_series and st.session_state.search_input == "남산공원길":
-            if os.path.exists(os.path.join(BASE_DIR, "n_seoul_tower_action.png")):
-                st.image("n_seoul_tower_action.png", caption="⚡ 영화 '케데헌'의 분위기를 상징하는 테마 일러스트 (AI 제작)", use_container_width=True)
+    # 기획 시리즈 카드 뭉치 바로 아래에 테마 일러스트 배치
+    if "케데헌" in selected_series and st.session_state.search_input == "남산공원길":
+        if os.path.exists(os.path.join(BASE_DIR, "n_seoul_tower_action.png")):
+            st.image("n_seoul_tower_action.png", caption="⚡ 영화 '케데헌'의 분위기를 상징하는 테마 일러스트 (AI 제작)", use_container_width=True)

@@ -26,8 +26,8 @@ if %errorlevel% neq 0 (
     %PYTHON_CMD% -m pip install -r requirements.txt
 )
 
-echo [INFO] Starting Streamlit server...
-%PYTHON_CMD% -m streamlit run app.py
+echo [INFO] Starting Streamlit server for multi-user access...
+%PYTHON_CMD% -m streamlit run app.py --server.port=8501 --server.address=0.0.0.0
 pause
 
 
