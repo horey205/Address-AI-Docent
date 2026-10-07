@@ -179,9 +179,16 @@ def send_address_docent_email(receiver_email: str, city: str, road_name: str, or
               {formatted_explanation}
             </div>
           </div>
+
+          <!-- 편지 서명 스타일 (Letter Sign-off) -->
+          <div style="margin-top: 25px; padding-top: 15px; border-top: 1px dashed #E2E8F0; text-align: right;">
+            <p style="margin: 0; font-size: 13px; color: #718096; font-style: italic;">공간정보와 도로명 이야기가 여러분의 일상에 즐거움이 되기를 바랍니다.</p>
+            <p style="margin: 6px 0 0 0; font-size: 16px; font-weight: 700; color: #1B5E20; letter-spacing: -0.3px;">
+              From. 신구대학교 부동산지적학과 🌿
+            </p>
+          </div>
         </div>
         <div class="footer">
-          <p><strong>발신: 신구대학교 부동산지적학과</strong> | 주소 AI 도슨트 체험관</p>
           <p>발급 번호: <strong>{cert_no}</strong> | 발급 일자: {today_str}</p>
           <p>본 메일은 사용자의 직접 요청으로 발송되었으며, 개인정보는 저장되지 않습니다.</p>
         </div>
