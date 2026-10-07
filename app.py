@@ -1086,7 +1086,7 @@ if data:
                     else:
                         selected_domain = domain_choice
 
-                st.caption("🔒 *입력하신 정보는 발송 즉시 파기되며 서버에 저장되지 않습니다.*")
+                st.caption("🔒 *입력하신 정보는 발송 즉시 파기되며 서버에 저장되지 않습니다.* (※ 학교 웹메일 `shingu.ac.kr`은 보안 정책상 수신되지 않습니다)")
 
                 button_label = f"📤 {user_name_input.strip()}님 메일로 도슨트 카드 전송하기" if user_name_input.strip() else "📤 내 메일로 도슨트 카드 전송하기"
                 if st.button(button_label, type="primary", use_container_width=True, key="send_email_btn"):
