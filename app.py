@@ -1068,18 +1068,17 @@ if data:
                 with email_col2:
                     domain_choice = st.selectbox(
                         "도메인 선택",
-                        options=["naver.com", "gmail.com", "직접입력"],
+                        options=["naver.com", "gmail.com", "직접입력", "shingu.ac.kr"],
                         index=0,
                         label_visibility="collapsed",
                         key="email_domain_choice"
                     )
 
-                # '직접입력' 선택 시 나타나는 추가 입력창 (기본값: shingu.ac.kr)
+                # '직접입력' 선택 시에만 나타나는 추가 입력창
                 if domain_choice == "직접입력":
                     custom_domain = st.text_input(
                         "도메인 직접입력",
-                        value="shingu.ac.kr",
-                        placeholder="shingu.ac.kr",
+                        placeholder="도메인 입력 (예: kakao.com, daum.net)",
                         label_visibility="collapsed",
                         key="email_custom_domain"
                     )
