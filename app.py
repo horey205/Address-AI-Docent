@@ -1074,11 +1074,12 @@ if data:
                         key="email_domain_choice"
                     )
 
-                # '직접입력' 선택 시 나타나는 추가 입력창
+                # '직접입력' 선택 시 나타나는 추가 입력창 (기본값: shingu.ac.kr)
                 if domain_choice == "직접입력":
                     custom_domain = st.text_input(
                         "도메인 직접입력",
-                        placeholder="도메인 입력 (예: kakao.com, daum.net)",
+                        value="shingu.ac.kr",
+                        placeholder="shingu.ac.kr",
                         label_visibility="collapsed",
                         key="email_custom_domain"
                     )
