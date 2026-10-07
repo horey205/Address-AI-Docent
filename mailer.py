@@ -18,9 +18,22 @@ def send_address_docent_email(receiver_email: str, city: str, road_name: str, or
     cert_no = f"DOCENT-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"🎙️ [주소 도슨트] '{road_name}' 도로명 해설 카드입니다."
+    msg["Subject"] = f"주소 도슨트 해설 리포트: {road_name}"
     msg["From"] = f"주소 AI 도슨트 체험관 <{sender_email}>"
     msg["To"] = receiver_email
+
+    # 일반 텍스트 버전 (스팸 필터 통과 필수 요소)
+    plain_text = f"""[주소 AI 도슨트 해설 리포트]
+위치: {city} {road_name}
+부여사유: {origin_reason}
+
+[도슨트 오디오 투어 스토리]
+{explanation}
+
+발급번호: {cert_no} | 발급일자: {today_str}
+본 메일은 사용자의 직접 요청으로 발송되었습니다.
+"""
+    msg.attach(MIMEText(plain_text, "plain", "utf-8"))
 
     # HTML 리포트 카드 디자인
     formatted_explanation = explanation.replace("\n", "<br>")

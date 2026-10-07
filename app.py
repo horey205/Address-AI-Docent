@@ -1083,13 +1083,22 @@ if data:
                     if not target_email or not re.match(email_regex, target_email):
                         st.warning("⚠️ 올바른 이메일 주소 형식을 입력해 주세요 (예: user@naver.com)")
                     else:
-                        # 발신자 정보 가져오기 (세션 상태 -> env 재검색 -> Streamlit Secrets 순)
+                        # 발신자 정보 가져오기 (세션 상태 -> env 재검색 -> Streamlit Secrets 안전 조회)
                         _env_gk, _env_uk, _env_gid, _env_gpw = load_env_keys()
-                        sender_id = st.session_state.get("sender_email") or _env_gid or st.secrets.get("GMAIL_ID", "") or st.secrets.get("SENDER_EMAIL", "")
-                        sender_pw = st.session_state.get("sender_password") or _env_gpw or st.secrets.get("GMAIL_SMTP", "") or st.secrets.get("SENDER_PASSWORD", "")
+                        sec_id = ""
+                        sec_pw = ""
+                        try:
+                            if hasattr(st, "secrets"):
+                                sec_id = st.secrets.get("GMAIL_ID", "") or st.secrets.get("SENDER_EMAIL", "")
+                                sec_pw = st.secrets.get("GMAIL_SMTP", "") or st.secrets.get("SENDER_PASSWORD", "")
+                        except Exception:
+                            pass
+
+                        sender_id = st.session_state.get("sender_email") or _env_gid or DEFAULT_GMAIL_ID or sec_id
+                        sender_pw = st.session_state.get("sender_password") or _env_gpw or DEFAULT_GMAIL_SMTP or sec_pw
                         
                         if not sender_id or not sender_pw:
-                            st.error("⚠️ 발신용 Gmail SMTP 설정이 누락되었습니다. (.env 파일 또는 좌측 사이드바 설정을 확인해 주세요)")
+                            st.error("⚠️ 발신용 Gmail SMTP 설정이 누락되었습니다. (.env 파일 또는 secrets 설정을 확인해 주세요)")
                         else:
                             with st.spinner("📨 도슨트 카드를 메일함으로 전송하고 있습니다..."):
                                 success, msg = send_address_docent_email(
