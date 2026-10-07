@@ -3,7 +3,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import datetime
 
-def send_address_docent_email(receiver_email: str, city: str, road_name: str, origin_reason: str, explanation: str, sender_email: str, sender_password: str) -> tuple[bool, str]:
+def send_address_docent_email(receiver_email: str, city: str, road_name: str, origin_reason: str, explanation: str, sender_email: str, sender_password: str, user_name: str = "") -> tuple[bool, str]:
     """
     도로명 도슨트 해설 카드를 수신자 이메일로 전송합니다.
     """
@@ -17,13 +17,18 @@ def send_address_docent_email(receiver_email: str, city: str, road_name: str, or
     today_str = datetime.datetime.now().strftime("%Y년 %m월 %d일")
     cert_no = f"DOCENT-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
 
+    # 신청인 호칭 처리
+    display_name = user_name.strip()
+    greeting_title = f"{display_name}님을 위한 " if display_name else ""
+
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"주소 도슨트 해설 리포트: {road_name}"
+    msg["Subject"] = f"{greeting_title}주소 도슨트 해설 리포트: {road_name}"
     msg["From"] = f"주소 AI 도슨트 체험관 <{sender_email}>"
     msg["To"] = receiver_email
 
     # 일반 텍스트 버전 (스팸 필터 통과 필수 요소)
-    plain_text = f"""[주소 AI 도슨트 해설 리포트]
+    plain_text = f"""[{greeting_title}주소 AI 도슨트 해설 리포트]
+신청인: {display_name if display_name else '방문자'}님
 위치: {city} {road_name}
 부여사유: {origin_reason}
 
@@ -152,10 +157,13 @@ def send_address_docent_email(receiver_email: str, city: str, road_name: str, or
       <div class="card">
         <div class="header">
           <h1>🎙️ 주소 AI 도슨트 리포트</h1>
-          <p>공간정보와 인공지능이 들려주는 도로명 이야기</p>
+          <p>{f'<strong>{display_name}님</strong>을 위한 맞춤 도로명 이야기' if display_name else '공간정보와 인공지능이 들려주는 도로명 이야기'}</p>
         </div>
         <div class="content">
-          <div class="badge-box">📍 {city}</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span class="badge-box">📍 {city}</span>
+            {f'<span style="font-size: 13px; color: #2E7D32; font-weight: bold;">👤 신청인: {display_name}님</span>' if display_name else ''}
+          </div>
           <h2 class="road-title">{road_name}</h2>
           
           <div class="info-card">

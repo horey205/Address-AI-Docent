@@ -1040,6 +1040,17 @@ if data:
 
                 # 빠른 도메인 입력 버튼
                 col_d1, col_d2, col_d3 = st.columns(3)
+                if "target_user_name" not in st.session_state:
+                    st.session_state.target_user_name = ""
+
+                user_name_input = st.text_input(
+                    "신청인 (이름 또는 닉네임)",
+                    value=st.session_state.target_user_name,
+                    key="input_user_name_box",
+                    placeholder="예: 홍길동 (입력 시 맞춤 리포트가 발급됩니다)",
+                    help="이름이나 닉네임을 입력하시면 도슨트 카드에 맞춤 호칭이 인쇄됩니다."
+                )
+
                 if "target_user_email" not in st.session_state:
                     st.session_state.target_user_email = ""
 
@@ -1057,26 +1068,31 @@ if data:
                     if st.button("@naver.com", key="chip_naver", use_container_width=True):
                         prefix = email_input.split('@')[0] if '@' in email_input else email_input
                         st.session_state.target_user_email = f"{prefix}@naver.com"
+                        st.session_state.target_user_name = user_name_input
                         st.rerun()
                 with domain_cols[1]:
                     if st.button("@gmail.com", key="chip_gmail", use_container_width=True):
                         prefix = email_input.split('@')[0] if '@' in email_input else email_input
                         st.session_state.target_user_email = f"{prefix}@gmail.com"
+                        st.session_state.target_user_name = user_name_input
                         st.rerun()
                 with domain_cols[2]:
                     if st.button("@kakao.com", key="chip_kakao", use_container_width=True):
                         prefix = email_input.split('@')[0] if '@' in email_input else email_input
                         st.session_state.target_user_email = f"{prefix}@kakao.com"
+                        st.session_state.target_user_name = user_name_input
                         st.rerun()
                 with domain_cols[3]:
                     if st.button("@shingu.ac.kr", key="chip_school", use_container_width=True):
                         prefix = email_input.split('@')[0] if '@' in email_input else email_input
                         st.session_state.target_user_email = f"{prefix}@shingu.ac.kr"
+                        st.session_state.target_user_name = user_name_input
                         st.rerun()
 
-                st.caption("🔒 *입력하신 이메일은 발송 즉시 파기되며 서버에 저장되지 않습니다.*")
+                st.caption("🔒 *입력하신 정보는 발송 즉시 파기되며 서버에 저장되지 않습니다.*")
 
-                if st.button("📤 내 메일로 도슨트 카드 전송하기", type="primary", use_container_width=True, key="send_email_btn"):
+                button_label = f"📤 {user_name_input.strip()}님 메일로 도슨트 카드 전송하기" if user_name_input.strip() else "📤 내 메일로 도슨트 카드 전송하기"
+                if st.button(button_label, type="primary", use_container_width=True, key="send_email_btn"):
                     target_email = email_input.strip()
                     email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
                     
@@ -1108,7 +1124,8 @@ if data:
                                     origin_reason=final_row['부여사유'],
                                     explanation=active_script,
                                     sender_email=sender_id,
-                                    sender_password=sender_pw
+                                    sender_password=sender_pw,
+                                    user_name=user_name_input.strip()
                                 )
                                 if success:
                                     st.success(f"🎉 '{target_email}' 주소로 도슨트 카드가 성공적으로 발송되었습니다!")
