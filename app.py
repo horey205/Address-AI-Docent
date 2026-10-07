@@ -1062,7 +1062,7 @@ if data:
                     help="도로명 도슨트 리포트 카드를 받을 이메일 주소를 입력하세요."
                 )
 
-                # 도메인 간편 추가 칩 버튼
+                # 도메인 간편 추가 칩 버튼 (자주 쓰는 개인 메일)
                 domain_cols = st.columns(4)
                 with domain_cols[0]:
                     if st.button("@naver.com", key="chip_naver", use_container_width=True):
@@ -1083,12 +1083,13 @@ if data:
                         st.session_state.target_user_name = user_name_input
                         st.rerun()
                 with domain_cols[3]:
-                    if st.button("@shingu.ac.kr", key="chip_school", use_container_width=True):
+                    if st.button("@daum.net", key="chip_daum", use_container_width=True):
                         prefix = email_input.split('@')[0] if '@' in email_input else email_input
-                        st.session_state.target_user_email = f"{prefix}@shingu.ac.kr"
+                        st.session_state.target_user_email = f"{prefix}@daum.net"
                         st.session_state.target_user_name = user_name_input
                         st.rerun()
 
+                st.caption("💡 *학교 웹메일(@ac.kr)은 보안 방화벽으로 차단될 수 있으니 네이버/구글 등 개인 메일 입력을 권장합니다.*")
                 st.caption("🔒 *입력하신 정보는 발송 즉시 파기되며 서버에 저장되지 않습니다.*")
 
                 button_label = f"📤 {user_name_input.strip()}님 메일로 도슨트 카드 전송하기" if user_name_input.strip() else "📤 내 메일로 도슨트 카드 전송하기"
