@@ -23,11 +23,12 @@ def send_address_docent_email(receiver_email: str, city: str, road_name: str, or
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"{greeting_title}주소 도슨트 해설 리포트: {road_name}"
-    msg["From"] = f"주소 AI 도슨트 체험관 <{sender_email}>"
+    msg["From"] = f"신구대학교 부동산지적학과 <{sender_email}>"
     msg["To"] = receiver_email
 
     # 일반 텍스트 버전 (스팸 필터 통과 필수 요소)
     plain_text = f"""[{greeting_title}주소 AI 도슨트 해설 리포트]
+발신: 신구대학교 부동산지적학과
 신청인: {display_name if display_name else '방문자'}님
 위치: {city} {road_name}
 부여사유: {origin_reason}
@@ -36,7 +37,7 @@ def send_address_docent_email(receiver_email: str, city: str, road_name: str, or
 {explanation}
 
 발급번호: {cert_no} | 발급일자: {today_str}
-본 메일은 사용자의 직접 요청으로 발송되었습니다.
+본 메일은 신구대학교 부동산지적학과 주소 AI 도슨트 체험관에서 발송되었습니다.
 """
     msg.attach(MIMEText(plain_text, "plain", "utf-8"))
 
@@ -156,6 +157,7 @@ def send_address_docent_email(receiver_email: str, city: str, road_name: str, or
     <body>
       <div class="card">
         <div class="header">
+          <div style="font-size: 13px; font-weight: bold; letter-spacing: 1px; opacity: 0.85; margin-bottom: 6px;">신구대학교 부동산지적학과</div>
           <h1>🎙️ 주소 AI 도슨트 리포트</h1>
           <p>{f'<strong>{display_name}님</strong>을 위한 맞춤 도로명 이야기' if display_name else '공간정보와 인공지능이 들려주는 도로명 이야기'}</p>
         </div>
@@ -179,6 +181,7 @@ def send_address_docent_email(receiver_email: str, city: str, road_name: str, or
           </div>
         </div>
         <div class="footer">
+          <p><strong>발신: 신구대학교 부동산지적학과</strong> | 주소 AI 도슨트 체험관</p>
           <p>발급 번호: <strong>{cert_no}</strong> | 발급 일자: {today_str}</p>
           <p>본 메일은 사용자의 직접 요청으로 발송되었으며, 개인정보는 저장되지 않습니다.</p>
         </div>
