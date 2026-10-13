@@ -528,7 +528,9 @@ def get_cached_docent(city, road, lang="한국어"):
     
     if "session_docent_cache" in st.session_state:
         for item in st.session_state.session_docent_cache:
-            if (clean_city in item["city"].replace(" ", "") and 
+            item_city = item["city"].replace(" ", "")
+            city_match = (not clean_city or not item_city or clean_city in item_city or item_city in clean_city)
+            if (city_match and 
                 clean_road == item["road"].replace(" ", "") and 
                 lang == item["lang"]):
                 return (item["script"], item["audio_path"])
@@ -538,12 +540,12 @@ def get_cached_docent(city, road, lang="한국어"):
         conn = sqlite3.connect(DB_FILE, timeout=10.0)
         query = """
             SELECT script, audio_path FROM story_cache 
-            WHERE REPLACE(city, ' ', '') LIKE ? 
+            WHERE (? LIKE '%' || REPLACE(city, ' ', '') || '%' OR REPLACE(city, ' ', '') LIKE '%' || ? || '%')
             AND REPLACE(road, ' ', '') = ? 
             AND lang = ?
             LIMIT 1
         """
-        row = conn.execute(query, (f'%{clean_city}%', clean_road, lang)).fetchone()
+        row = conn.execute(query, (clean_city, clean_city, clean_road, lang)).fetchone()
         conn.close()
         return row
     except Exception as e:
@@ -1107,7 +1109,8 @@ if search_query:
             if target_city:
                 clean_target_city = target_city.replace(" ", "")
                 for idx, label in enumerate(options_list):
-                    if clean_target_city in label.replace(" ", ""):
+                    clean_label = label.replace(" ", "")
+                    if clean_target_city in clean_label or clean_label in clean_target_city:
                         default_idx = idx
                         break
             
@@ -1271,130 +1274,131 @@ if search_query:
                     else:
                         render_web_speech_player(docent_script, selected_lang)
 
-            # ---------------------------------------------------------
-            # 📬 이메일로 도로명 리포트 받기 (검색 즉시 이용 가능)
-            # ---------------------------------------------------------
-            active_script = None
-            if cached and not is_fallback:
-                active_script = cached[0]
-            elif 'docent_script' in locals() and docent_script and "오류" not in docent_script and "⚠️" not in docent_script:
-                active_script = docent_script
+        # ---------------------------------------------------------
+        # 📬 이메일로 도로명 리포트 받기 (검색 즉시 및 공식/완료된 AI 해설 모두 이용 가능)
+        # ---------------------------------------------------------
+        active_script = None
+        if cached and not is_fallback:
+            active_script = cached[0]
+        elif 'docent_script' in locals() and docent_script and "오류" not in docent_script and "⚠️" not in docent_script:
+            active_script = docent_script
 
-            # 해설 생성 전이면 공식 도로명 부여 사유 및 기본 안내를 발송하고, 생성되었으면 AI 도슨트 스토리 발송
-            if active_script:
-                send_explanation = active_script
-                email_sub_caption = "💌 도로명 공식 유래와 AI 도슨트 오디오 스크립트, 도로 위치 지도가 담긴 예쁜 리포트 카드를 발송합니다."
-            else:
-                send_explanation = (
-                    f"{final_row['시군구']} {final_row['도로명']}의 공식 도로명 부여 사유 안내입니다.\n\n"
-                    f"\"{final_row['부여사유']}\"\n\n"
-                    f"※ 주소 AI 도슨트 웹페이지에서 'AI 도슨트 해설 듣기'를 실행하시면, 공간의 역사와 지명 유래를 담은 풍부한 스토리텔링 해설을 언제든 감상하실 수 있습니다."
-                )
-                email_sub_caption = "💌 도로명 공식 부여 사유와 위치 지도가 담긴 예쁜 리포트 카드를 메일로 즉시 발송합니다. (위의 'AI 도슨트 해설 듣기'를 누르면 오디오 스토리까지 함께 전송됩니다)"
+        # 해설이 이미 완성(공식 추천사례 또는 생성완료)되어 있으면 AI 도슨트 스토리 전체 발송,
+        # 아직 해설 생성 전이면 공식 도로명 부여 사유 및 기본 안내를 발송
+        if active_script:
+            send_explanation = active_script
+            email_sub_caption = "💌 도로명 공식 유래와 AI 도슨트 스토리 해설, 도로 위치 지도가 담긴 예쁜 리포트 카드를 발송합니다."
+        else:
+            send_explanation = (
+                f"{final_row['시군구']} {final_row['도로명']}의 공식 도로명 부여 사유 안내입니다.\n\n"
+                f"\"{final_row['부여사유']}\"\n\n"
+                f"※ 주소 AI 도슨트 웹페이지에서 'AI 도슨트 해설 듣기'를 실행하시면, 공간의 역사와 지명 유래를 담은 풍부한 스토리텔링 해설을 언제든 감상하실 수 있습니다."
+            )
+            email_sub_caption = "💌 도로명 공식 부여 사유와 위치 지도가 담긴 예쁜 리포트 카드를 메일로 즉시 발송합니다. (위의 'AI 도슨트 해설 듣기'를 누르면 오디오 스토리까지 함께 전송됩니다)"
 
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("### 📬 도로명 이야기 내 메일로 받아보기")
-            st.caption(email_sub_caption)
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### 📬 도로명 이야기 내 메일로 받아보기")
+        st.caption(email_sub_caption)
 
-            # 빠른 도메인 입력 버튼
-            col_d1, col_d2, col_d3 = st.columns(3)
-            if "target_user_name" not in st.session_state:
-                st.session_state.target_user_name = ""
+        # 빠른 도메인 입력 버튼
+        col_d1, col_d2, col_d3 = st.columns(3)
+        if "target_user_name" not in st.session_state:
+            st.session_state.target_user_name = ""
 
-            user_name_input = st.text_input(
-                "신청인 (이름 또는 닉네임)",
-                value=st.session_state.target_user_name,
-                key="input_user_name_box",
-                placeholder="예: 홍길동 (입력 시 맞춤 리포트가 발급됩니다)",
-                help="이름이나 닉네임을 입력하시면 도슨트 카드에 맞춤 호칭이 인쇄됩니다."
+        user_name_input = st.text_input(
+            "신청인 (이름 또는 닉네임)",
+            value=st.session_state.target_user_name,
+            key="input_user_name_box",
+            placeholder="예: 홍길동 (입력 시 맞춤 리포트가 발급됩니다)",
+            help="이름이나 닉네임을 입력하시면 도슨트 카드에 맞춤 호칭이 인쇄됩니다."
+        )
+
+        st.markdown("<label style='font-size: 14px; font-weight: bold; color: #2E7D32;'>수신할 이메일 주소</label>", unsafe_allow_html=True)
+        
+        # [아이디] @ [도메인 선택] 2단 분할 레이아웃
+        email_col1, at_col, email_col2 = st.columns([1.2, 0.2, 1.2])
+        
+        with email_col1:
+            email_id = st.text_input(
+                "이메일 아이디",
+                placeholder="아이디 입력 (예: gildong)",
+                label_visibility="collapsed",
+                key="email_user_id"
+            )
+        with at_col:
+            st.markdown("<div style='text-align: center; font-size: 1.5rem; font-weight: bold; color: #2E7D32; line-height: 2.3em;'>@</div>", unsafe_allow_html=True)
+        with email_col2:
+            domain_choice = st.selectbox(
+                "도메인 선택",
+                options=["naver.com", "gmail.com", "직접입력"],
+                index=0,
+                label_visibility="collapsed",
+                key="email_domain_choice"
             )
 
-            st.markdown("<label style='font-size: 14px; font-weight: bold; color: #2E7D32;'>수신할 이메일 주소</label>", unsafe_allow_html=True)
-            
-            # [아이디] @ [도메인 선택] 2단 분할 레이아웃
-            email_col1, at_col, email_col2 = st.columns([1.2, 0.2, 1.2])
-            
-            with email_col1:
-                email_id = st.text_input(
-                    "이메일 아이디",
-                    placeholder="아이디 입력 (예: gildong)",
+            # '직접입력' 선택 시 바로 아래(같은 우측 컬럼)에 빈 입력창 배치
+            if domain_choice == "직접입력":
+                custom_domain = st.text_input(
+                    "도메인 직접입력",
+                    placeholder="도메인 입력 (예: kakao.com)",
                     label_visibility="collapsed",
-                    key="email_user_id"
+                    key="email_custom_domain"
                 )
-            with at_col:
-                st.markdown("<div style='text-align: center; font-size: 1.5rem; font-weight: bold; color: #2E7D32; line-height: 2.3em;'>@</div>", unsafe_allow_html=True)
-            with email_col2:
-                domain_choice = st.selectbox(
-                    "도메인 선택",
-                    options=["naver.com", "gmail.com", "직접입력"],
-                    index=0,
-                    label_visibility="collapsed",
-                    key="email_domain_choice"
-                )
+                selected_domain = custom_domain.strip().lstrip("@")
+            else:
+                selected_domain = domain_choice
 
-                # '직접입력' 선택 시 바로 아래(같은 우측 컬럼)에 빈 입력창 배치
-                if domain_choice == "직접입력":
-                    custom_domain = st.text_input(
-                        "도메인 직접입력",
-                        placeholder="도메인 입력 (예: kakao.com)",
-                        label_visibility="collapsed",
-                        key="email_custom_domain"
-                    )
-                    selected_domain = custom_domain.strip().lstrip("@")
-                else:
-                    selected_domain = domain_choice
+        st.caption("🔒 *입력하신 정보는 발송 즉시 파기되며 서버에 저장되지 않습니다.* (※ 학교 웹메일 `shingu.ac.kr`은 보안 정책상 수신되지 않습니다)")
 
-            st.caption("🔒 *입력하신 정보는 발송 즉시 파기되며 서버에 저장되지 않습니다.* (※ 학교 웹메일 `shingu.ac.kr`은 보안 정책상 수신되지 않습니다)")
+        button_label = f"📤 {user_name_input.strip()}님 메일로 리포트 카드 전송하기" if user_name_input.strip() else "📤 내 메일로 리포트 카드 전송하기"
+        if st.button(button_label, type="primary", use_container_width=True, key="send_email_btn"):
+            clean_id = email_id.strip()
+            clean_dom = selected_domain.strip()
 
-            button_label = f"📤 {user_name_input.strip()}님 메일로 리포트 카드 전송하기" if user_name_input.strip() else "📤 내 메일로 리포트 카드 전송하기"
-            if st.button(button_label, type="primary", use_container_width=True, key="send_email_btn"):
-                clean_id = email_id.strip()
-                clean_dom = selected_domain.strip()
+            # @가 아이디에 포함되어 입력된 경우에도 자동 보정
+            if "@" in clean_id:
+                target_email = clean_id
+            else:
+                target_email = f"{clean_id}@{clean_dom}" if clean_id and clean_dom else ""
 
-                # @가 아이디에 포함되어 입력된 경우에도 자동 보정
-                if "@" in clean_id:
-                    target_email = clean_id
-                else:
-                    target_email = f"{clean_id}@{clean_dom}" if clean_id and clean_dom else ""
+            email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+            
+            if not clean_id or not clean_dom or not re.match(email_regex, target_email):
+                st.warning("⚠️ 올바른 이메일 아이디와 도메인을 입력해 주세요 (예: hong123 @ naver.com)")
+            else:
+                # 발신자 정보 가져오기 (세션 상태 -> env 재검색 -> Streamlit Secrets 안전 조회)
+                _env_gk, _env_uk, _env_gid, _env_gpw = load_env_keys()
+                sec_id = ""
+                sec_pw = ""
+                try:
+                    if hasattr(st, "secrets"):
+                        sec_id = st.secrets.get("GMAIL_ID", "") or st.secrets.get("SENDER_EMAIL", "")
+                        sec_pw = st.secrets.get("GMAIL_SMTP", "") or st.secrets.get("SENDER_PASSWORD", "")
+                except Exception:
+                    pass
 
-                email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+                sender_id = st.session_state.get("sender_email") or _env_gid or DEFAULT_GMAIL_ID or sec_id
+                sender_pw = st.session_state.get("sender_password") or _env_gpw or DEFAULT_GMAIL_SMTP or sec_pw
                 
-                if not clean_id or not clean_dom or not re.match(email_regex, target_email):
-                    st.warning("⚠️ 올바른 이메일 아이디와 도메인을 입력해 주세요 (예: hong123 @ naver.com)")
+                if not sender_id or not sender_pw:
+                    st.error("⚠️ 발신용 Gmail SMTP 설정이 누락되었습니다. (.env 파일 또는 secrets 설정을 확인해 주세요)")
                 else:
-                    # 발신자 정보 가져오기 (세션 상태 -> env 재검색 -> Streamlit Secrets 안전 조회)
-                    _env_gk, _env_uk, _env_gid, _env_gpw = load_env_keys()
-                    sec_id = ""
-                    sec_pw = ""
-                    try:
-                        if hasattr(st, "secrets"):
-                            sec_id = st.secrets.get("GMAIL_ID", "") or st.secrets.get("SENDER_EMAIL", "")
-                            sec_pw = st.secrets.get("GMAIL_SMTP", "") or st.secrets.get("SENDER_PASSWORD", "")
-                    except Exception:
-                        pass
-
-                    sender_id = st.session_state.get("sender_email") or _env_gid or DEFAULT_GMAIL_ID or sec_id
-                    sender_pw = st.session_state.get("sender_password") or _env_gpw or DEFAULT_GMAIL_SMTP or sec_pw
-                    
-                    if not sender_id or not sender_pw:
-                        st.error("⚠️ 발신용 Gmail SMTP 설정이 누락되었습니다. (.env 파일 또는 secrets 설정을 확인해 주세요)")
-                    else:
-                        with st.spinner("📨 도슨트 카드를 메일함으로 전송하고 있습니다..."):
-                            success, msg = send_address_docent_email(
-                                receiver_email=target_email,
-                                city=final_row['시군구'],
-                                road_name=final_row['도로명'],
-                                origin_reason=final_row['부여사유'],
-                                explanation=send_explanation,
-                                sender_email=sender_id,
-                                sender_password=sender_pw,
-                                user_name=user_name_input.strip()
-                            )
-                            if success:
-                                st.success(f"🎉 '{target_email}' 주소로 도슨트 카드가 성공적으로 발송되었습니다!")
-                                st.info("💡 메일이 보이지 않는 경우 스팸 메일함 또는 프로모션함을 확인해 주세요.")
-                            else:
-                                st.error(f"❌ 메일 발송 실패: {msg}")
+                    with st.spinner("📨 도슨트 카드를 메일함으로 전송하고 있습니다..."):
+                        success, msg = send_address_docent_email(
+                            receiver_email=target_email,
+                            city=final_row['시군구'],
+                            road_name=final_row['도로명'],
+                            origin_reason=final_row['부여사유'],
+                            explanation=send_explanation,
+                            sender_email=sender_id,
+                            sender_password=sender_pw,
+                            user_name=user_name_input.strip()
+                        )
+                        if success:
+                            st.success(f"🎉 '{target_email}' 주소로 도슨트 카드가 성공적으로 발송되었습니다!")
+                            st.info("💡 메일이 보이지 않는 경우 스팸 메일함 또는 프로모션함을 확인해 주세요.")
+                        else:
+                            st.error(f"❌ 메일 발송 실패: {msg}")
     else:
         st.warning(f"⚠️ '{search_query}'에 해당하는 도로명 정보를 찾을 수 없습니다. 도로명을 다시 확인해 주세요.")
 
