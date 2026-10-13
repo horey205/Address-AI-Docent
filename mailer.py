@@ -77,12 +77,8 @@ def send_address_docent_email(receiver_email: str, city: str, road_name: str, or
     query_param = urllib.parse.quote(f"{city} {road_name}")
     naver_map_url = f"https://m.map.naver.com/search2/search.naver?query={query_param}"
 
-    # 네이버 메일/웹메일 특성상 CID 및 Base64 Data URI를 모두 지원
-    img_src = ""
-    if map_image_bytes:
-        b64_data = base64.b64encode(map_image_bytes).decode('ascii')
-        # 기본 src는 data URI (네이버 웹메일에서 즉시 렌더링에 가장 확실함)
-        img_src = f"data:image/png;base64,{b64_data}"
+    # 네이버, 지메일(Gmail), 아웃룩 등 모든 웹메일/앱에서 100% 렌더링되도록 표준 CID 인라인 적용
+    img_src = "cid:docent_map_image" if map_image_bytes else ""
 
     msg_root = MIMEMultipart("related")
     msg_root["Subject"] = f"[주소 도슨트] {greeting_title}{city} {road_name} 이야기 리포트"
