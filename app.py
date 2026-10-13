@@ -324,11 +324,169 @@ def generate_speech_sync(text, city, road, lang="한국어"):
         loop = asyncio.new_event_loop()
         loop.run_until_complete(_run())
         loop.close()
+        return output_file
     except Exception as e:
-        # 혹시 기존 루프가 있는 경우를 대비한 폴백
-        asyncio.run(_run())
+        try:
+            asyncio.run(_run())
+            return output_file
+        except Exception:
+            # 클라우드 IP 차단(WSServerHandshakeError) 등의 환경에서는 안전하게 None 반환
+            return None
+
+def render_web_speech_player(text, lang="한국어"):
+    """
+    브라우저 내장 Web Speech API를 활용하여 서버 IP 차단 없이
+    고품질 음성으로 해설을 들려주는 대화형 플레이어 컴포넌트
+    """
+    lang_code_map = {
+        "한국어": "ko-KR",
+        "English": "en-US",
+        "日本語": "ja-JP"
+    }
+    lang_code = lang_code_map.get(lang, "ko-KR")
+    clean_text_json = json.dumps(text, ensure_ascii=False)
+    
+    html_code = f"""
+    <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1.5px solid #86efac; border-radius: 12px; padding: 12px 16px; margin: 10px 0 14px 0; box-shadow: 0 2px 6px rgba(0,0,0,0.03); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="background: #16a34a; color: white; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; box-shadow: 0 2px 4px rgba(22,163,74,0.3);">🎙️</div>
+          <div>
+            <div style="font-weight: 700; color: #166534; font-size: 0.95rem;">AI 음성 도슨트 (브라우저 고품질 음성)</div>
+            <div id="tts-status" style="font-size: 0.8rem; color: #4b5563; margin-top: 2px;">준비 완료 (재생 버튼을 누르면 즉시 들으실 수 있습니다)</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button id="tts-play-btn" onclick="startSpeech()" style="background: #16a34a; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-weight: 600; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 5px; box-shadow: 0 2px 4px rgba(22,163,74,0.25);">
+            ▶️ 음성 듣기
+          </button>
+          <button id="tts-pause-btn" onclick="pauseSpeech()" style="background: white; color: #374151; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 13px; font-weight: 500; font-size: 0.88rem; cursor: pointer;">
+            ⏸️ 일시 정지
+          </button>
+          <button id="tts-stop-btn" onclick="stopSpeech()" style="background: white; color: #dc2626; border: 1px solid #fecaca; border-radius: 8px; padding: 8px 13px; font-weight: 500; font-size: 0.88rem; cursor: pointer;">
+            ⏹️ 멈춤
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const fullText = {clean_text_json};
+      const langCode = "{lang_code}";
+      let synth = window.speechSynthesis;
+      let utterance = null;
+      let isPaused = false;
+      let heartbeatTimer = null;
+
+      function updateStatus(msg, color="#4b5563") {{
+        const el = document.getElementById("tts-status");
+        if (el) {{
+          el.innerText = msg;
+          el.style.color = color;
+        }}
+      }}
+
+      function getBestVoice(targetLang) {{
+        if (!synth) return null;
+        const voices = synth.getVoices();
+        const prefix = targetLang.split('-')[0].toLowerCase();
         
-    return output_file
+        // 1순위: Natural / Neural / Online / Google / Yuna / Heami 등 신경망 고품질 음성
+        const priority = voices.filter(v => 
+          v.lang.toLowerCase().startsWith(prefix) && 
+          (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Neural') || v.name.includes('Google') || v.name.includes('Yuna') || v.name.includes('Heami') || v.name.includes('SunHi'))
+        );
+        if (priority.length > 0) return priority[0];
+        
+        // 2순위: 해당 언어 일치 음성
+        const matched = voices.filter(v => v.lang.toLowerCase().startsWith(prefix));
+        return matched.length > 0 ? matched[0] : null;
+      }}
+
+      function startSpeech() {{
+        if (!synth) {{
+          updateStatus("❌ 현재 브라우저에서 음성 합성을 지원하지 않습니다.", "#dc2626");
+          return;
+        }}
+
+        if (synth.paused && isPaused) {{
+          synth.resume();
+          isPaused = false;
+          updateStatus("▶️ 재생 중...", "#16a34a");
+          return;
+        }}
+
+        stopSpeech();
+
+        utterance = new SpeechSynthesisUtterance(fullText);
+        utterance.lang = langCode;
+        utterance.rate = 0.95;
+        utterance.pitch = 1.0;
+
+        const voice = getBestVoice(langCode);
+        if (voice) {{
+          utterance.voice = voice;
+        }}
+
+        utterance.onstart = function() {{
+          updateStatus("🎙️ 도슨트 해설이 재생되고 있습니다...", "#16a34a");
+          isPaused = false;
+          
+          if (heartbeatTimer) clearInterval(heartbeatTimer);
+          heartbeatTimer = setInterval(() => {{
+            if (synth && synth.speaking && !isPaused) {{
+              synth.pause();
+              synth.resume();
+            }}
+          }}, 10000);
+        }};
+
+        utterance.onend = function() {{
+          updateStatus("✅ 해설 청취 완료", "#166534");
+          isPaused = false;
+          if (heartbeatTimer) clearInterval(heartbeatTimer);
+        }};
+
+        utterance.onerror = function(e) {{
+          if (e.error !== 'interrupted' && e.error !== 'canceled') {{
+            updateStatus("⚠️ 재생 오류가 발생했습니다 (" + (e.error || "") + ")", "#dc2626");
+          }}
+          isPaused = false;
+          if (heartbeatTimer) clearInterval(heartbeatTimer);
+        }};
+
+        synth.speak(utterance);
+      }}
+
+      function pauseSpeech() {{
+        if (synth && synth.speaking) {{
+          if (!synth.paused) {{
+            synth.pause();
+            isPaused = true;
+            updateStatus("⏸️ 일시 정지됨", "#d97706");
+          }} else {{
+            synth.resume();
+            isPaused = false;
+            updateStatus("▶️ 재생 중...", "#16a34a");
+          }}
+        }}
+      }}
+
+      function stopSpeech() {{
+        if (synth) {{
+          synth.cancel();
+          isPaused = false;
+          updateStatus("⏹️ 멈춤", "#4b5563");
+          if (heartbeatTimer) clearInterval(heartbeatTimer);
+        }}
+      }}
+
+      if (window.speechSynthesis && window.speechSynthesis.onvoiceschanged !== undefined) {{
+        window.speechSynthesis.onvoiceschanged = () => {{}};
+      }}
+    </script>
+    """
+    components.html(html_code, height=92)
 
 def get_audio_player(file_path):
     import base64
@@ -394,7 +552,7 @@ def save_docent_cache(city, road, lang, script, audio_path):
         "road": road,
         "lang": lang,
         "script": script,
-        "audio_path": audio_path,
+        "audio_path": audio_path or "",
         "created_at": time.strftime("%Y-%m-%d %H:%M")
     })
     
@@ -403,7 +561,7 @@ def save_docent_cache(city, road, lang, script, audio_path):
         conn = sqlite3.connect(DB_FILE, timeout=20.0)
         c = conn.cursor()
         c.execute('INSERT OR REPLACE INTO story_cache (city, road, lang, script, audio_path) VALUES (?, ?, ?, ?, ?)', 
-                  (city, road, lang, script, audio_path))
+                  (city, road, lang, script, audio_path or ""))
         conn.commit()
         conn.close()
     except:
@@ -1040,12 +1198,13 @@ if search_query:
                 st.success("✅ 내 도감에서 불러왔습니다! (보존된 사례)")
                 st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
                 
+                # 브라우저 Web Speech 플레이어 (차단 없는 즉시 음성 재생)
+                render_web_speech_player(docent_script, current_lang)
+
                 if os.path.exists(server_audio_path):
                     # Base64 변환 후 HTML로 출력
                     audio_html = get_audio_player(server_audio_path)
                     st.markdown(audio_html, unsafe_allow_html=True)
-                else:
-                    st.info("🔈 음성 파일은 서버에 업로드 중이거나 로컬 전용입니다. (검색된 경로: " + server_audio_path + ")")
                 
                 # 수동 재생성 버튼 추가
                 if st.button("🔄 AI 해설 다시 만들기", key="re_gen_btn"):
@@ -1092,7 +1251,12 @@ if search_query:
                     save_docent_cache(final_row['시군구'], final_row['도로명'], selected_lang, docent_script, audio_file)
                     st.info("✨ 새로운 해설이 생성 및 도감에 저장되었습니다.")
                     st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
-                    st.audio(audio_file)
+                    
+                    # 브라우저 Web Speech 플레이어 (차단 없는 즉시 음성 재생)
+                    render_web_speech_player(docent_script, selected_lang)
+
+                    if audio_file and os.path.exists(audio_file):
+                        st.audio(audio_file)
 
             # ---------------------------------------------------------
             # 📬 이메일로 해설 카드 받기 (체험용 이메일 발송 섹션)
