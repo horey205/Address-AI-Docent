@@ -4,6 +4,20 @@ import json
 import os
 import asyncio
 import edge_tts
+import edge_tts.communicate
+import edge_tts.constants
+
+# 마이크로소프트 Edge TTS 2026년 최신 공식 엔드포인트 패치 (403 웹소켓 거부 완전 해결)
+try:
+    MS_NEW_WSS_URL = (
+        "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1"
+        f"?Ocp-Apim-Subscription-Key={edge_tts.constants.TRUSTED_CLIENT_TOKEN}"
+    )
+    edge_tts.constants.WSS_URL = MS_NEW_WSS_URL
+    edge_tts.communicate.WSS_URL = MS_NEW_WSS_URL
+except Exception:
+    pass
+
 import sqlite3
 import base64
 import uuid
@@ -1198,13 +1212,13 @@ if search_query:
                 st.success("✅ 내 도감에서 불러왔습니다! (보존된 사례)")
                 st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
                 
-                # 브라우저 Web Speech 플레이어 (차단 없는 즉시 음성 재생)
-                render_web_speech_player(docent_script, current_lang)
-
                 if os.path.exists(server_audio_path):
-                    # Base64 변환 후 HTML로 출력
+                    # Base64 변환 후 HTML로 출력 (이전 화면과 동일한 표준 오디오 플레이어 바)
                     audio_html = get_audio_player(server_audio_path)
                     st.markdown(audio_html, unsafe_allow_html=True)
+                else:
+                    # MP3 파일이 없을 때만 보조용 브라우저 플레이어 표시
+                    render_web_speech_player(docent_script, current_lang)
                 
                 # 수동 재생성 버튼 추가
                 if st.button("🔄 AI 해설 다시 만들기", key="re_gen_btn"):
@@ -1252,11 +1266,10 @@ if search_query:
                     st.info("✨ 새로운 해설이 생성 및 도감에 저장되었습니다.")
                     st.markdown(f'<div class="docent-script-box">{docent_script}</div>', unsafe_allow_html=True)
                     
-                    # 브라우저 Web Speech 플레이어 (차단 없는 즉시 음성 재생)
-                    render_web_speech_player(docent_script, selected_lang)
-
                     if audio_file and os.path.exists(audio_file):
                         st.audio(audio_file)
+                    else:
+                        render_web_speech_player(docent_script, selected_lang)
 
             # ---------------------------------------------------------
             # 📬 이메일로 해설 카드 받기 (체험용 이메일 발송 섹션)
