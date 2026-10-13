@@ -8,14 +8,22 @@ import urllib.request
 import urllib.parse
 import json
 import base64
+import math
+import io
+from PIL import Image, ImageDraw
 
 def fetch_road_map_image(city: str, road_name: str) -> tuple[bytes | None, float | None, float | None, str | None]:
     """
-    해당 도로명의 위경도 좌표를 조회하고, 정적 지도 이미지 바이너리 및 외부 지도 URL을 가져옵니다.
+    해당 도로명의 위경도 좌표를 조회하고, 웹 화면(Google Maps)과 100% 일치하는 고화질 한국어 지도 이미지를 렌더링합니다.
     """
     clean_city = city.strip()
     clean_road = road_name.strip()
-    candidates = [f"{clean_city} {clean_road}", clean_road, clean_city]
+    candidates = [
+        f"대한민국 {clean_city} {clean_road}",
+        f"{clean_city} {clean_road}",
+        f"수원시 {clean_road}" if "수원" in clean_city else f"{clean_city.split()[0]} {clean_road}",
+        clean_road
+    ]
     
     lat, lon = None, None
     for q in candidates:
@@ -24,7 +32,7 @@ def fetch_road_map_image(city: str, road_name: str) -> tuple[bytes | None, float
         try:
             url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(q)}&format=json&limit=1"
             req = urllib.request.Request(url, headers={"User-Agent": "AddressDocentApp/2.0 (docent@shingu.ac.kr)"})
-            with urllib.request.urlopen(req, timeout=4) as resp:
+            with urllib.request.urlopen(req, timeout=3) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 if data:
                     lat = float(data[0]["lat"])
@@ -33,20 +41,57 @@ def fetch_road_map_image(city: str, road_name: str) -> tuple[bytes | None, float
         except Exception:
             continue
 
-    map_url_external = None
     if lat is not None and lon is not None:
         try:
-            # 600x280 정적 지도 이미지 다운로드
-            static_map_url = f"https://static-maps.yandex.ru/1.x/?lang=ko_KR&ll={lon},{lat}&z=15&l=map&size=600,280&pt={lon},{lat},pm2rdm"
-            req_map = urllib.request.Request(static_map_url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req_map, timeout=5) as resp_map:
-                img_bytes = resp_map.read()
-                if len(img_bytes) > 1000:
-                    return img_bytes, lat, lon, static_map_url
+            # 웹 화면과 동일한 고화질 한국어 구글 지도 타일 렌더링 (Yandex 대신 Google Maps)
+            zoom = 15
+            width, height = 600, 300
+            lat_rad = math.radians(lat)
+            n = 2.0 ** zoom
+            exact_x = (lon + 180.0) / 360.0 * n
+            exact_y = (1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n
+            
+            tile_x = int(exact_x)
+            tile_y = int(exact_y)
+            offset_x = int((exact_x - tile_x) * 256)
+            offset_y = int((exact_y - tile_y) * 256)
+            
+            canvas = Image.new('RGB', (256 * 3, 256 * 3), (245, 245, 245))
+            for dx in range(-1, 2):
+                for dy in range(-1, 2):
+                    tx, ty = tile_x + dx, tile_y + dy
+                    tile_url = f"https://mt1.google.com/vt/lyrs=m&x={tx}&y={ty}&z={zoom}&hl=ko"
+                    try:
+                        req_tile = urllib.request.Request(tile_url, headers={"User-Agent": "Mozilla/5.0"})
+                        tile_bytes = urllib.request.urlopen(req_tile, timeout=3).read()
+                        tile_img = Image.open(io.BytesIO(tile_bytes))
+                        canvas.paste(tile_img, ((dx + 1) * 256, (dy + 1) * 256))
+                    except Exception:
+                        pass
+                        
+            center_canvas_x = 256 + offset_x
+            center_canvas_y = 256 + offset_y
+            left = center_canvas_x - width // 2
+            top = center_canvas_y - height // 2
+            cropped = canvas.crop((left, top, left + width, top + height))
+            
+            # 구글 지도 스타일의 선명한 빨간색 위치 핀 그리기
+            draw = ImageDraw.Draw(cropped)
+            cx, cy = width // 2, height // 2
+            r = 10
+            draw.ellipse([cx - r, cy - 2*r, cx + r, cy], fill=(234, 67, 53), outline=(197, 34, 31))
+            draw.polygon([(cx - r + 2, cy - r), (cx + r - 2, cy - r), (cx, cy + 3)], fill=(234, 67, 53))
+            draw.ellipse([cx - 4, cy - 2*r + 6, cx + 4, cy - 4], fill=(255, 255, 255))
+            
+            buf = io.BytesIO()
+            cropped.save(buf, format="PNG")
+            img_bytes = buf.getvalue()
+            if len(img_bytes) > 1000:
+                return img_bytes, lat, lon, None
         except Exception:
             pass
 
-    return None, lat, lon, map_url_external
+    return None, lat, lon, None
 
 def send_address_docent_email(receiver_email: str, city: str, road_name: str, origin_reason: str, explanation: str, sender_email: str, sender_password: str, user_name: str = "") -> tuple[bool, str]:
     """
@@ -76,6 +121,7 @@ def send_address_docent_email(receiver_email: str, city: str, road_name: str, or
     map_image_bytes, map_lat, map_lon, _ = fetch_road_map_image(city, road_name)
     query_param = urllib.parse.quote(f"{city} {road_name}")
     naver_map_url = f"https://m.map.naver.com/search2/search.naver?query={query_param}"
+    google_map_url = f"https://www.google.com/maps/search/?api=1&query={query_param}"
 
     # 네이버, 지메일(Gmail), 아웃룩 등 모든 웹메일/앱에서 100% 렌더링되도록 표준 CID 인라인 적용
     img_src = "cid:docent_map_image" if map_image_bytes else ""
@@ -98,7 +144,8 @@ def send_address_docent_email(receiver_email: str, city: str, road_name: str, or
 [도슨트 오디오 투어 스토리]
 {cleaned_explanation}
 
-지도 바로가기: {naver_map_url}
+네이버 지도: {naver_map_url}
+구글 지도: {google_map_url}
 발급번호: {cert_no} | 발급일자: {today_str}
 본 메일은 신구대학교 부동산지적학과 주소 AI 도슨트 체험관에서 발송되었습니다.
 """
@@ -120,7 +167,11 @@ def send_address_docent_email(receiver_email: str, city: str, road_name: str, or
               </div>
               <div style="text-align: right; margin-top: 6px;">
                 <a href="{naver_map_url}" target="_blank" style="color: #2E7D32; font-size: 12px; text-decoration: none; font-weight: bold;">
-                  🔗 큰 지도 & 길찾기 바로가기 &gt;
+                  🔗 네이버 길찾기 &gt;
+                </a>
+                &nbsp;|&nbsp;
+                <a href="{google_map_url}" target="_blank" style="color: #1A73E8; font-size: 12px; text-decoration: none; font-weight: bold;">
+                  🌏 구글 지도 열기 &gt;
                 </a>
               </div>
             </td>
