@@ -266,6 +266,7 @@ def search_roads_db(query, limit=50):
                 return []
         return []
 
+    conn = None
     try:
         conn = sqlite3.connect(ROAD_DB_FILE, timeout=10.0)
         c = conn.cursor()
@@ -277,11 +278,16 @@ def search_roads_db(query, limit=50):
             # 2차: 부분 일치 검색
             c.execute('SELECT city, road, reason FROM roads WHERE road LIKE ? LIMIT ?', (f'%{query}%', limit))
             rows = c.fetchall()
-        conn.close()
         return [{"시군구": r[0], "도로명": r[1], "부여사유": r[2]} for r in rows]
     except Exception as e:
         print(f"Search DB Error: {e}")
         return []
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 def search_brave(query, api_key):
     """Brave Search API를 사용해 웹 검색 결과를 가져옵니다."""
@@ -320,8 +326,8 @@ VOICE_CONFIG = {
 
 def generate_speech_sync(text, city, road, lang="한국어"):
     """동시 접속 시 Streamlit 이벤트 루프와 충돌하지 않도록 별도 스레드/이벤트루프에서 안전하게 음성을 생성합니다."""
-    safe_city = city.replace(" ", "")
-    safe_road = road.replace(" ", "")
+    safe_city = re.sub(r'[\\/*?:"<>| ]', '_', city)
+    safe_road = re.sub(r'[\\/*?:"<>| ]', '_', road)
     lang_name = VOICE_CONFIG.get(lang, VOICE_CONFIG["한국어"])["lang_name"]
     filename = f"{safe_city}_{safe_road}_{lang_name}.mp3"
     mp3_dir = os.path.join(BASE_DIR, "mp3")
@@ -334,18 +340,25 @@ def generate_speech_sync(text, city, road, lang="한국어"):
         communicate = edge_tts.Communicate(text, voice)
         await communicate.save(output_file)
 
+    loop = None
     try:
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         loop.run_until_complete(_run())
-        loop.close()
         return output_file
-    except Exception as e:
+    except Exception:
         try:
             asyncio.run(_run())
             return output_file
         except Exception:
             # 클라우드 IP 차단(WSServerHandshakeError) 등의 환경에서는 안전하게 None 반환
             return None
+    finally:
+        if loop and not loop.is_closed():
+            try:
+                loop.close()
+            except Exception:
+                pass
 
 def render_web_speech_player(text, lang="한국어"):
     """
@@ -536,6 +549,7 @@ def get_cached_docent(city, road, lang="한국어"):
                 return (item["script"], item["audio_path"])
 
     # 2. 없으면 서버에 보존된 공식 홍보용 마스터 DB에서 탐색
+    conn = None
     try:
         conn = sqlite3.connect(DB_FILE, timeout=10.0)
         query = """
@@ -546,10 +560,15 @@ def get_cached_docent(city, road, lang="한국어"):
             LIMIT 1
         """
         row = conn.execute(query, (clean_city, clean_city, clean_road, lang)).fetchone()
-        conn.close()
         return row
     except Exception as e:
         return None
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 init_db()
 
@@ -573,15 +592,21 @@ def save_docent_cache(city, road, lang, script, audio_path):
     })
     
     # 2. 서버 로컬 DB에도 캐싱 시도
+    conn = None
     try:
         conn = sqlite3.connect(DB_FILE, timeout=20.0)
         c = conn.cursor()
         c.execute('INSERT OR REPLACE INTO story_cache (city, road, lang, script, audio_path) VALUES (?, ?, ?, ?, ?)', 
                   (city, road, lang, script, audio_path or ""))
         conn.commit()
-        conn.close()
-    except:
+    except Exception:
         pass
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 def generate_docent_story(city, road, reason, target_lang="한국어", model_type="Upstage", gemini_key="", gemini_model="gemini-3.8-flash", upstage_key="", upstage_model="solar-pro4-260806", or_key="", or_model="nvidia/nemotron-3-super-120b-a12b:free", api_key=""):
     """Upstage Solar, Google Gemini 또는 OpenRouter를 활용하여 최상의 다국어 도슨트 해설을 생성합니다."""

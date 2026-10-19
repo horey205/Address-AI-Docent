@@ -63,7 +63,8 @@ def fetch_road_map_image(city: str, road_name: str) -> tuple[bytes | None, float
                     tile_url = f"https://mt1.google.com/vt/lyrs=m&x={tx}&y={ty}&z={zoom}&hl=ko"
                     try:
                         req_tile = urllib.request.Request(tile_url, headers={"User-Agent": "Mozilla/5.0"})
-                        tile_bytes = urllib.request.urlopen(req_tile, timeout=3).read()
+                        with urllib.request.urlopen(req_tile, timeout=3) as tile_resp:
+                            tile_bytes = tile_resp.read()
                         tile_img = Image.open(io.BytesIO(tile_bytes))
                         canvas.paste(tile_img, ((dx + 1) * 256, (dy + 1) * 256))
                     except Exception:
@@ -108,8 +109,10 @@ def send_address_docent_email(receiver_email: str, city: str, road_name: str, or
     today_str = datetime.datetime.now().strftime("%Y년 %m월 %d일")
     cert_no = f"DOCENT-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-    # 신청인 호칭 처리
-    display_name = user_name.strip()
+    # 신청인 호칭 및 헤더 주입(CRLF) 방어 처리
+    display_name = re.sub(r'[\r\n]', '', user_name).strip()
+    clean_subj_city = re.sub(r'[\r\n]', '', city).strip()
+    clean_subj_road = re.sub(r'[\r\n]', '', road_name).strip()
     greeting_title = f"{display_name}님을 위한 " if display_name else ""
 
     # 문단 분리 및 가독성 높은 HTML 변환
@@ -127,7 +130,7 @@ def send_address_docent_email(receiver_email: str, city: str, road_name: str, or
     img_src = "cid:docent_map_image" if map_image_bytes else ""
 
     msg_root = MIMEMultipart("related")
-    msg_root["Subject"] = f"[주소 도슨트] {greeting_title}{city} {road_name} 이야기 리포트"
+    msg_root["Subject"] = f"[주소 도슨트] {greeting_title}{clean_subj_city} {clean_subj_road} 이야기 리포트"
     msg_root["From"] = f"신구대학교 부동산지적학과 <{sender_email}>"
     msg_root["To"] = receiver_email
 
