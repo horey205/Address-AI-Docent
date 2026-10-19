@@ -39,7 +39,20 @@ st.markdown("""
 
     .main { background-color: #f8f9fa; }
     
-    /* 입력 필드 스타일링 */
+    /* 상단 헤더 메뉴바(Share, Star, GitHub, 메인 메뉴 등) 완전 숨김 */
+    header[data-testid="stHeader"], [data-testid="stHeader"] {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+    }
+    #MainMenu {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    footer {
+        display: none !important;
+        visibility: hidden !important;
+    }
     .stTextInput > div > div > input {
         border-radius: 15px !important;
         border: 2px solid #e0e0e0 !important;
